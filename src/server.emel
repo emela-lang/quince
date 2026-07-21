@@ -1,0 +1,32 @@
+-- The accept loop for quince. This is the only module that touches an effect:
+-- `serve` binds a port and runs a self-tail-recursive loop (spec 0045) that
+-- accepts a request, routes it, and responds. `serve` takes the router as its
+-- first argument so a `|>` chain can end with `... |> server.serve(8080)`.
+
+module server
+
+import std.io
+import std.http
+import router
+
+-- One accept -> route -> respond step, then recurse. A failure on this request
+-- is swallowed so the loop keeps serving (spec 0046 S8).
+fn serve_loop(s: Server, r: Router) -> Unit uses { Io, Http, HttpServer } {
+    try {
+        let inc = HttpServer.accept(s)
+        HttpServer.respond(inc, router.route(r, inc.request))
+    } catch {
+        e -> ()
+    }
+    serve_loop(s, r)
+}
+
+-- Bind `port` and serve `r` forever. A bind failure is reported and ends the
+-- program (spec 0046 Examples).
+pub fn serve(r: Router, port: Int) -> Unit uses { Io, Http, HttpServer } {
+    try {
+        serve_loop(HttpServer.bind(port), r)
+    } catch {
+        e -> Io.eprint("quince: bind failed\n")
+    }
+}

@@ -1,0 +1,30 @@
+-- A quince server built as a `|>` chain (spec 0019). Handlers are written at
+-- their natural minimal row — `home` is pure (`uses {}`), `hit` uses `{ Io }` —
+-- and stored into the router by subsumption (spec 0023). Run it with:
+--
+--   emela run examples/hello.emel --package .
+--   curl localhost:8080/        # hello from quince
+--   curl localhost:8080/hit     # hit  (also logs on the server)
+--   curl localhost:8080/nope    # not found
+
+import std.io
+import std.http
+import quince.response
+import quince.router
+import quince.server
+
+fn home(req: Request) -> Response uses {} {
+    response.ok("hello from quince\n")
+}
+
+fn hit(req: Request) -> Response uses { Io } {
+    let logged = Io.print("hit /hit\n")
+    response.ok("hit\n")
+}
+
+fn main() -> Unit uses { Io, Http, HttpServer } {
+    router.new()
+        |> router.get("/", home)
+        |> router.get("/hit", hit)
+        |> server.serve(8080)
+}

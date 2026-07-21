@@ -1,0 +1,125 @@
+-- Method + path routing for quince, built with `|>` (spec 0019). `new()` starts
+-- an empty router; `get`/`post`/... append a route and return the router so a
+-- chain reads top to bottom; `route` dispatches a request to the first matching
+-- handler (or the fallback).
+--
+-- Handlers are stored at the widest row quince supports, `uses { Io, Http }`, so
+-- a handler written at its natural minimal row (`uses {}`, `uses { Io }`, ...)
+-- is accepted by subsumption (spec 0023). `method_eq` / `method_code` are pure
+-- because the orphan rule (spec 0020) forbids `impl Eq for Method` here — the
+-- `Method` type is owned by `std.http`.
+
+module router
+
+import std.io
+import std.http
+import response
+import brix.assert
+
+pub record Route {
+    method: Method
+    path: String
+    handler: (Request) -> Response uses { Io, Http }
+}
+
+pub record Router {
+    routes: Array<Route>
+    fallback: (Request) -> Response uses { Io, Http }
+}
+
+-- The default fallback: 404. Pure; stored into the wider fallback field by
+-- subsumption.
+pub fn not_found(req: Request) -> Response uses {} {
+    response.not_found()
+}
+
+-- An empty router whose fallback answers 404.
+pub fn new() -> Router uses {} {
+    Router { routes: []  fallback: not_found }
+}
+
+-- A total ordering code for a method, so we can compare without `impl Eq`.
+fn method_code(m: Method) -> Int uses {} {
+    match m {
+        Get -> 0
+        Head -> 1
+        Post -> 2
+        Put -> 3
+        Delete -> 4
+        Patch -> 5
+        Options -> 6
+    }
+}
+
+pub fn method_eq(a: Method, b: Method) -> Bool uses {} {
+    method_code(a) == method_code(b)
+}
+
+-- Append a GET route.
+pub fn get(r: Router, path: String, handler: (Request) -> Response uses { Io, Http }) -> Router uses {} {
+    Router {
+        routes: array_push(r.routes, Route { method: Method::Get  path: path  handler: handler })
+        fallback: r.fallback
+    }
+}
+
+-- Append a POST route.
+pub fn post(r: Router, path: String, handler: (Request) -> Response uses { Io, Http }) -> Router uses {} {
+    Router {
+        routes: array_push(r.routes, Route { method: Method::Post  path: path  handler: handler })
+        fallback: r.fallback
+    }
+}
+
+-- Replace the fallback handler.
+pub fn fallback(r: Router, handler: (Request) -> Response uses { Io, Http }) -> Router uses {} {
+    Router { routes: r.routes  fallback: handler }
+}
+
+-- Walk the routes by index (self tail call, spec 0045: constant stack). The
+-- index is guarded by `array_length` above, so `array_get_unchecked` is safe.
+fn dispatch_at(r: Router, req: Request, i: Int) -> Response uses { Io, Http } {
+    if i >= array_length(r.routes) {
+        let fb = r.fallback
+        fb(req)
+    } else {
+        let rt = array_get_unchecked(r.routes, i)
+        if method_eq(rt.method, req.method) && rt.path == req.url {
+            let h = rt.handler
+            h(req)
+        } else {
+            dispatch_at(r, req, i + 1)
+        }
+    }
+}
+
+-- Dispatch a request to the first matching route, else the fallback.
+pub fn route(r: Router, req: Request) -> Response uses { Io, Http } {
+    dispatch_at(r, req, 0)
+}
+
+-- A pure handler for tests: stored into the wider handler field by subsumption.
+fn ok_handler(req: Request) -> Response uses {} {
+    response.ok("ok")
+}
+
+fn req_of(method: Method, url: String) -> Request uses {} {
+    Request { method: method  url: url  headers: []  body: "" }
+}
+
+@test
+fn method_eq_matches_and_discriminates() -> Unit uses {} {
+    assert.ok(method_eq(Method::Get, Method::Get))
+    assert.ok(!method_eq(Method::Get, Method::Post))
+}
+
+@test
+fn route_dispatches_match_and_falls_back() -> Unit uses { Io, Http } {
+    let r = new() |> get("/", ok_handler)
+    let hit = route(r, req_of(Method::Get, "/"))
+    assert.eq(hit.status, 200)
+    let miss_path = route(r, req_of(Method::Get, "/nope"))
+    assert.eq(miss_path.status, 404)
+    let miss_method = route(r, req_of(Method::Post, "/"))
+    assert.eq(miss_method.status, 404)
+}

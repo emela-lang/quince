@@ -1,0 +1,7 @@
+[pome]
+name = "github.com/emela-lang/quince"
+version = "0.1.0"
+emela = "0.6"
+
+[dev-dependencies]
+"github.com/emela-lang/brix" = "^0.1.0"
