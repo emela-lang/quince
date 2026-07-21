@@ -51,10 +51,6 @@ fn method_code(m: Method) -> Int uses {} {
     }
 }
 
-pub fn method_eq(a: Method, b: Method) -> Bool uses {} {
-    method_code(a) == method_code(b)
-}
-
 -- Append a GET route.
 pub fn get(r: Router, path: String, handler: (Request) -> Response uses { Io, Http }) -> Router uses {} {
     Router {
@@ -84,7 +80,7 @@ fn dispatch_at(r: Router, req: Request, i: Int) -> Response uses { Io, Http } {
         fb(req)
     } else {
         let rt = array_get_unchecked(r.routes, i)
-        if method_eq(rt.method, req.method) && rt.path == req.url {
+        if rt.method == req.method && rt.path == req.url {
             let h = rt.handler
             h(req)
         } else {
@@ -105,12 +101,6 @@ fn ok_handler(req: Request) -> Response uses {} {
 
 fn req_of(method: Method, url: String) -> Request uses {} {
     Request { method: method  url: url  headers: []  body: "" }
-}
-
-@test
-fn method_eq_matches_and_discriminates() -> Unit uses {} {
-    assert.ok(method_eq(Method::Get, Method::Get))
-    assert.ok(!method_eq(Method::Get, Method::Post))
 }
 
 @test
