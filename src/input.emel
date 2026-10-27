@@ -1,0 +1,79 @@
+# The input of a route as one Dynamic object, for `Decode` of the input type. A field takes its
+# value from where its name says: a parameter of the pattern from the path, `body` from the JSON
+# body (read by the caller), and any other field from the query.
+#
+# The path and the query carry only text, so each value is turned into the kind of value its
+# field holds before `Decode` reads it: a number for Int, Int64 and Float, a Bool for `true` and
+# `false`, and Items for a List, from every value of the name in the query. A value that does
+# not turn is left as text, so that `Decode` reports it at the field.
+
+import Dynamic.{Dynamic, Number, Text, Items, Bool}
+import Dynamic.Number
+import Shape.{Shape, Field, Record}
+
+## The fields of `shape` (a record) other than `body`, read from `params` and `query`. A List
+## field missing from both is empty; any other is left out, so that `Decode` reads it as Null.
+pub fn fields(
+  shape: Shape,
+  params: List[(String, String)],
+  query: List[(String, String)],
+) -> List[(String, Dynamic)] {
+  Shape.strip(shape) match {
+    Record(name: _, fields:) -> List.filter_map(fields, fn(field) {
+      if field.name == "body" {
+        None
+      } else {
+        values = lookup(params, field.name) match {
+          []     -> lookup(query, field.name)
+          values -> values
+        }
+        if List.is_empty(values) {
+          absent(field.shape) |> Option.map(fn(d) { (field.name, d) })
+        } else {
+          Some((field.name, from_text(field.shape, values)))
+        }
+      }
+    })
+    _ -> []
+  }
+}
+
+## Whether `shape` has a field `name`.
+pub fn has_field(shape: Shape, name: String) -> Bool {
+  List.any(Shape.field_names(shape), fn(n) { n == name })
+}
+
+fn absent(shape: Shape) -> Option[Dynamic] {
+  Shape.strip(shape) match {
+    Shape.List(_) -> Some(Items([]))
+    _             -> None
+  }
+}
+
+fn lookup(pairs: List[(String, String)], name: String) -> List[String] {
+  List.filter_map(pairs, fn((key, value)) { if key == name { Some(value) } else { None } })
+}
+
+## `values` (at least one) as the kind of value `shape` holds.
+fn from_text(shape: Shape, values: List[String]) -> Dynamic {
+  first = List.head(values) |> Option.or("")
+  Shape.strip(shape) match {
+    Shape.List(item)    -> Items(List.map(values, fn(v) { from_text(item, [v]) }))
+    Shape.Option(inner) -> from_text(inner, values)
+    Shape.Int           -> number(first)
+    Shape.Int64         -> number(first)
+    Shape.Float         -> number(first)
+    Shape.Bool -> first match {
+      "true"  -> Bool(True)
+      "false" -> Bool(False)
+      _       -> Text(first)
+    }
+    _                   -> Text(first)
+  }
+}
+
+fn number(text: String) -> Dynamic {
+  Number(Number.parse(text)) escape {
+    ParseError(..) -> Text(text)
+  }
+}

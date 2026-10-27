@@ -1,0 +1,41 @@
+# What can be done with todos. The arguments are domain values; the paths and the JSON of the API
+# do not appear here.
+
+import Domain.Todo.{Todo, TodoId, Title, TodoStore, TodoNotFound}
+
+pub fn create(title: Title) -> Todo use TodoStore {
+  store = use TodoStore
+  todo = Todo(id: store.next_id(), title:, done: False)
+  store.save(todo)
+  todo
+}
+
+pub fn list(done: Option[Bool]) -> List[Todo] use TodoStore {
+  todos = (use TodoStore).all()
+  done match {
+    Some(d) -> List.filter(todos, fn(t) { t.done == d })
+    None    -> todos
+  }
+}
+
+pub fn get(id: TodoId) -> Todo fails TodoNotFound use TodoStore {
+  (use TodoStore).find(id)
+}
+
+pub fn rename(id: TodoId, title: Title) -> Todo fails TodoNotFound use TodoStore {
+  store = use TodoStore
+  todo = Todo(title:, ..store.find(id))
+  store.save(todo)
+  todo
+}
+
+pub fn complete(id: TodoId) -> Todo fails TodoNotFound use TodoStore {
+  store = use TodoStore
+  todo = Todo(done: True, ..store.find(id))
+  store.save(todo)
+  todo
+}
+
+pub fn remove(id: TodoId) -> () fails TodoNotFound use TodoStore {
+  (use TodoStore).remove(id)
+}

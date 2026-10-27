@@ -1,0 +1,47 @@
+# Todos kept in a `State`, for tests. A service runs one launch for each request, so a state set
+# up inside the service would start empty every time.
+
+import Std.State.{State}
+import Domain.Todo.{Todo, TodoId, TodoStore, TodoNotFound}
+import Domain.Todo
+
+pub type Memory(todos: List[Todo], next: Int)
+
+pub fn empty() -> Memory {
+  Memory(todos: [], next: 1)
+}
+
+pub handler MemoryTodos: TodoStore {
+  fn next_id() {
+    memory = (use State[Memory]).get()
+    (use State[Memory]).set(Memory(next: memory.next + 1, ..memory))
+    Todo.numbered(memory.next)
+  }
+
+  fn find(id) {
+    List.find((use State[Memory]).get().todos, fn(t) { t.id == id })
+      |> Option.or_fail(TodoNotFound(id:))
+  }
+
+  fn all() {
+    (use State[Memory]).get().todos
+  }
+
+  fn save(todo) {
+    (use State[Memory]).update(fn(m) {
+      others = List.filter(m.todos, fn(t) { t.id != todo.id })
+      Memory(todos: List.append(others, [todo]), ..m)
+    })
+  }
+
+  fn remove(id) {
+    memory = (use State[Memory]).get()
+    if List.any(memory.todos, fn(t) { t.id == id }) {
+      (use State[Memory]).set(
+        Memory(todos: List.filter(memory.todos, fn(t) { t.id != id }), ..memory),
+      )
+    } else {
+      fail TodoNotFound(id:)
+    }
+  }
+}

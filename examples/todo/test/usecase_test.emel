@@ -1,0 +1,46 @@
+# The use cases without HTTP or JSON.
+
+import Std.State.{State}
+import Domain.Todo.{Todo, TodoNotFound}
+import Domain.Todo
+import Store.Memory.{MemoryTodos}
+import Store.Memory
+import Usecase.Todos
+import Shape.Rule.{Broken}
+
+fn title(s: String) -> Todo.Title {
+  Todo.title(s) escape {
+    Broken(..) -> panic("not a title: #{s}")
+  }
+}
+
+@test
+fn a_completed_todo_is_done() {
+  (todo, _) = State.run(Memory.empty(), fn() {
+    with MemoryTodos { Todos.complete(Todos.create(title("write")).id) }
+  })
+  assert todo.done
+}
+
+@test
+fn the_list_is_filtered_by_done() {
+  (open, _) = State.run(Memory.empty(), fn() {
+    with MemoryTodos {
+      Todos.create(title("a"))
+      Todos.complete(Todos.create(title("b")).id)
+      Todos.list(Some(False))
+    }
+  })
+  assert List.map(open, fn(t) { Todo.title_text(t.title) }) == ["a"]
+}
+
+@test
+fn a_missing_todo_is_not_found() {
+  found = {
+    State.run(Memory.empty(), fn() { with MemoryTodos { Todos.get(Todo.numbered(9)) } })
+    False
+  } escape {
+    TodoNotFound(id: _) -> True
+  }
+  assert found
+}

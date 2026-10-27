@@ -1,129 +1,102 @@
 # quince
 
-A thin HTTP server framework for Emela, distributed as a Pome.
-
-`std.http`'s `HttpServer` capability (spec 0046) gives you `bind` / `accept` /
-`respond` / `close` and expects you to write the accept loop yourself as a
-self-tail-recursive `fn main`. That is a lot of boilerplate — the loop, the
-`try`/`catch`, and hand-written `if req.url == ...` routing — and it assumes you
-understand the effect system. quince wraps that into a `|>` builder (spec 0019)
-so a server reads as a single pipeline.
+Emela の HTTP API を，route の list として書く．route は method，パスの pattern，handler の 3 つで，handler は入力の型を 1 つ受け取り，出力の型を 1 つ返す．quince は request から入力を読み，handler を呼び，出力を JSON で返す．
 
 ```emela
-import std.io
-import std.http
-import quince.response
-import quince.router
-import quince.server
+import Std.Http
+import Std.Http.Request.{Request, Post}
+import Std.Http.Response.{Response}
+import Quince.{Api, InvalidInput}
 
-fn home(req: Request) -> Response uses {} {
-    response.ok("hello from quince\n")
+type TodoPath(id: String)
+type CreateTodo(body: TodoBody)
+type TodoBody(title: String)
+type TodoView(id: String, title: String, done: Bool)
+
+fn api() -> Api[TodoNotFound, { TodoStore }] {
+  Quince.new()
+    |> Quince.get("/todos/:id", show)
+    |> Quince.route(Post, "/todos", 201, create)
 }
 
-fn hit(req: Request) -> Response uses { Io } {
-    let logged = Io.print("hit /hit\n")
-    response.ok("hit\n")
+fn show(input: TodoPath) -> TodoView fails TodoNotFound use TodoStore { ... }
+
+fn on_error[R](run: fn() -> Response fails TodoNotFound use R) -> Response use R {
+  run() escape {
+    TodoNotFound(id: _) -> Quince.problem(404, "todo not found")
+  }
 }
 
-fn main() -> Unit uses { Io, Http, HttpServer } {
-    router.new()
-        |> router.get("/", home)
-        |> router.get("/hit", hit)
-        |> server.serve(8080)
+@entry(Http.serve)
+pub fn app(request: Request) -> Response {
+  with KvTodos { Quince.handle(api(), request, on_error) }
 }
 ```
 
-## Handlers and their effects
+層に分けた Todo API の全体は `examples/todo` にある．
 
-A handler is an ordinary function `(Request) -> Response`. Write it at its
-natural, minimal effect row: `home` above is pure (`uses {}`), `hit` uses
-`{ Io }`, a proxy would use `{ Http }`. quince stores every route's handler at
-the widest row it supports — `uses { Io, Http }` — and a narrower handler is
-accepted there by **effect subsumption** (spec 0023: `{} ⊆ { Io, Http }`). You
-never have to widen a handler by hand, and a pure handler stays pure for testing.
+## 入力
 
-Because handlers are plain functions, you test them without a socket:
+入力の型は record にする．フィールドの値の出どころは名前で決まる．
+
+- pattern の引数（`:id`）と同じ名前のフィールドは，パスから読む
+- `body` という名前のフィールドは，本文を JSON として読む
+- それ以外のフィールドは query から読む．List のフィールドは同じ名前の値を全部集め，1 つもなければ空にする
+
+パスと query の値は文字列で来る．quince は入力の型の Shape を見て，Int，Int64，Float のフィールドは数に，Bool のフィールドは `true` と `false` を Bool に直してから `Decode` に渡す．直せない値は文字列のまま渡すので，`Decode` がそのフィールドで失敗する．
+
+入力の型には `Decode` と `Shaped` を，出力の型には `Encode` を要求する．
+
+## 400
+
+入力を読めなければ，handler を呼ばずに 400 を返す．`from_dynamic_all` で読むので，壊れたフィールドは全部並ぶ．
+
+```json
+{"errors":[{"field":"body.title","message":"expected text, found number"}],"status":400,"title":"Bad Request"}
+```
+
+- `content-type` は `application/problem+json`（RFC 9457）
+- `field` はフィールドへの道で，`title`，`body.title`，`tags[1]` の形
+- 本文が JSON でなければ，`field` は `body`
+
+handler の中で domain の値に直すときは `Quince.field` を使う．`Broken`，`AllBroken`（x/shape の `Rule`）と `ParseError` を，そのフィールドの 400 にする．それ以外の error はそのまま `on_error` に届く．
 
 ```emela
-import brix.assert
+fn create(input: CreateTodo) -> TodoView fails InvalidInput use TodoStore {
+  title = Quince.field("title", fn() { Todo.title(input.body.title) })
+  view(Todos.create(title))
+}
+```
 
+## handler の error
+
+handler が失敗しうる error（`InvalidInput` を除く）は `Api[E, R]` の E になり，`handle` に渡す `on_error` が受ける．`on_error` は `escape` で error を response に直すので，対応を書き忘れた error は compiler が見つける．error の少ない handler も，effect を使わない handler も，同じ `Api` に登録できる．
+
+## quince が答えるもの
+
+| request | response |
+|---|---|
+| どの route の pattern にも合わないパス | 404 |
+| パスに合う route はあるが，method が違う | 405 と `allow` |
+| HEAD | GET の route を走らせ，本文を空にする |
+| OPTIONS | 204 と `allow` |
+| 何も返さない handler（`route_empty`，`delete`） | 204 |
+
+2 つの route が同じ request に合うときは，先に登録したほうを使う．
+
+## 登録の確かめ
+
+`api()` は request ごとに組み立て直されるので，pattern と入力の型が合っているかは request が来るまで判らない．`Quince.check(api())` をテストから呼ぶ．pattern の引数に対応するフィールドがない route を，1 行ずつ返す．
+
+```emela
 @test
-fn root_is_200() -> Unit uses {} {
-    assert.eq(home(Request { method: Method::Get  url: "/"  headers: []  body: "" }).status, 200)
+fn the_routes_are_well_formed() {
+  assert Quince.check(Todos.api()) == []
 }
 ```
 
-Run the suite with `emela test`.
+## まだないもの
 
-## API
-
-### `quince.response` — response builders (all `uses {}`)
-
-| function | result |
-|---|---|
-| `ok(body)` | 200 with `body` |
-| `text(code, body)` | `code` with `body` |
-| `not_found()` | 404 with a default body |
-| `status(res, code)` | `res` with the status replaced (`\|>` form) |
-| `header(res, name, value)` | `res` with one header appended (`\|>` form) |
-
-The `|>` forms take a `Response` first, so a handler can build one top-to-bottom:
-`ok("x") |> status(201) |> header("content-type", "text/plain")`.
-
-### `quince.router` — method + path routing
-
-| function | result |
-|---|---|
-| `new()` | an empty router (fallback = 404) |
-| `get(r, path, h)` / `post(r, path, h)` | append a route, return the router |
-| `fallback(r, h)` | replace the fallback handler |
-| `route(r, req)` | dispatch to the first matching route, else the fallback |
-| `method_eq(a, b)` | compare two methods (no `impl Eq for Method`; see below) |
-
-`new()` / `get` / `post` / `fallback` take the router first, so routes chain with
-`|>`. Matching is method + exact path for now (query strings are compared as-is
-until PR-B2 strips them).
-
-### `quince.server` — the accept loop
-
-| function | result |
-|---|---|
-| `serve(r, port)` | bind `port` and serve `r` forever |
-
-`serve` takes the router first, so a chain ends with `... |> server.serve(8080)`.
-It is the only module that touches an effect (`{ Io, Http, HttpServer }`).
-
-## Capability audit
-
-quince declares no dependencies at runtime (`std.http` / `std.io` are embedded
-core, spec 0038; brix is a dev-dependency). A server built on quince has the
-capability set `{ HttpServer, Io }` — the outbound-network capability `Http`
-does **not** appear unless one of your handlers actually calls `Http.get`, so a
-serve-only service reads as "listens, never dials out" straight from its
-manifest (spec 0046 S1).
-
-## Running the example
-
-```
-emela run examples/hello.emel --package .
-curl localhost:8080/        # hello from quince
-curl localhost:8080/hit     # hit   (also logs on the server)
-curl localhost:8080/nope    # not found
-```
-
-## Limitations (this cut)
-
-- **Fixed maximum row.** Handlers are stored at `uses { Io, Http }`. A handler
-  needing some other effect (a user-defined `uses { Db }`) does not fit yet. That
-  needs effect-row polymorphism (spec 0022) for a `serve<'e>` that carries the
-  handler's own row — a later cut.
-- **Sequential only.** One request at a time (spec 0046 S7); no concurrency.
-- **Exact-path matching.** No path parameters (`/users/:id`) yet.
-- `method_eq` is hand-written because the orphan rule (spec 0020) forbids
-  `impl Eq for Method` here — `Method` is owned by `std.http`.
-
-## Requirements
-
-Needs an Emela toolchain with **function-value effect subsumption** (spec 0023):
-storing a `uses {}` handler into a `uses { Io, Http }` field is what makes the
-router usable. On a toolchain without it, only pure handlers can be registered.
+- `derive Decode, Shaped`．compiler が導出できるのは Eq，Ord，Show だけなので，入力と出力の型の impl は今は手で書く（`examples/todo/src/web/todos.emel`）．std に移す proposal（emela-lang/emela#455）が入れば，型の宣言に `derive` を書くだけになる
+- OpenAPI の生成．route は入力の型の Shape を持っているので，その上に作れる．出力の型にも `Shaped` を要求することになる
+- 認証の結果のような，request ごとの値の受け渡し．今は effect と handler で書く

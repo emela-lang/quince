@@ -1,0 +1,22 @@
+# A todo API in layers: `Domain` (the values and the port), `Usecase` (what can be done),
+# `Web` (the HTTP API) and `Store` (the adapters of the port). The dependencies point one way:
+# web → usecase → domain ← store.
+
+import Std.Http
+import Std.Http.Request.{Request}
+import Std.Http.Response.{Response}
+import Std.State.{State}
+import Store.Memory.{MemoryTodos}
+import Store.Memory
+import Web.Todos
+import Quince
+
+## The service. The store is a State, so it starts empty for each request; a real service gives
+## an adapter of a database or a key-value store here instead.
+@entry(Http.serve)
+pub fn app(request: Request) -> Response {
+  (response, _) = State.run(Memory.empty(), fn() {
+    with MemoryTodos { Quince.handle(Todos.api(), request, Todos.on_error) }
+  })
+  response
+}

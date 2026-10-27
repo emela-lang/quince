@@ -1,0 +1,49 @@
+# The paths that a route answers, written as `/todos/:id`: a segment that starts with `:` takes
+# any one segment of the path under that name, and the others must match as written.
+
+pub enum Part {
+  Literal(String)
+  Param(String)
+} derive Eq
+
+pub type Pattern(text: String, parts: List[Part]) derive Eq
+
+## The pattern of `text`. Empty segments are dropped, so `/todos/` is `/todos`.
+pub fn parse(text: String) -> Pattern {
+  parts = String.split(text, "/")
+    |> List.filter(fn(s) { s != "" })
+    |> List.map(fn(s) {
+      if String.starts_with(s, ":") {
+        Param(String.chars(s) |> List.drop(1) |> String.concat)
+      } else {
+        Literal(s)
+      }
+    })
+  Pattern(text:, parts:)
+}
+
+## The names of the parameters, in order.
+pub fn names(pattern: Pattern) -> List[String] {
+  List.filter_map(pattern.parts, fn(part) {
+    part match {
+      Param(name) -> Some(name)
+      Literal(_)  -> None
+    }
+  })
+}
+
+## The parameters taken from `segments` (percent-decoded, as `Request.segments` gives them), or
+## `None` if the path does not match.
+pub fn matches(pattern: Pattern, segments: List[String]) -> Option[List[(String, String)]] {
+  if List.length(pattern.parts) != List.length(segments) {
+    None
+  } else {
+    List.zip(pattern.parts, segments) |> List.fold(from: Some([]), f: fn(acc, (part, segment)) {
+      (acc, part) match {
+        (None, _)                       -> None
+        (Some(found), Param(name))      -> Some(List.append(found, [(name, segment)]))
+        (Some(found), Literal(literal)) -> if literal == segment { Some(found) } else { None }
+      }
+    })
+  }
+}
