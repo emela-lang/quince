@@ -1,0 +1,44 @@
+# Todos and where they are kept. Nothing here knows HTTP, JSON or quince.
+
+import Shape.Rule.{Rule, Broken}
+
+const TITLE: List[Rule[String]] = [Rule.min_length(1), Rule.max_length(100)]
+
+pub opaque type TodoId(value: String) derive Eq
+
+pub opaque type Title(value: String) derive Eq
+
+pub type Todo(id: TodoId, title: Title, done: Bool) derive Eq
+
+pub error TodoNotFound(id: TodoId)
+
+## Where todos are kept (a port). The adapters are in `Store`.
+pub effect TodoStore {
+  fn next_id() -> TodoId
+  fn find(id: TodoId) -> Todo fails TodoNotFound
+  fn all() -> List[Todo]
+  fn save(todo: Todo) -> ()
+  fn remove(id: TodoId) -> () fails TodoNotFound
+}
+
+## A title: 1 to 100 characters after trimming.
+pub fn title(s: String) -> Title fails Broken {
+  Title(value: Rule.check(String.trim(s), TITLE))
+}
+
+pub fn todo_id(s: String) -> TodoId fails Broken {
+  TodoId(value: Rule.check(s, [Rule.min_length(1)]))
+}
+
+## The id numbered `n`, for stores that count.
+pub fn numbered(n: Int) -> TodoId {
+  TodoId(value: Int.to_string(n))
+}
+
+pub fn id_text(id: TodoId) -> String {
+  id.value
+}
+
+pub fn title_text(title: Title) -> String {
+  title.value
+}

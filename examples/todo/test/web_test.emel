@@ -1,0 +1,82 @@
+# The API through requests built as values. The requests of one test share one store.
+
+import Std.Http.Request.{Request, Get, Post, Patch, Delete}
+import Std.Http.Response.{Response}
+import Std.State.{State}
+import Store.Memory.{MemoryTodos, Memory}
+import Store.Memory
+import Web.Todos
+import Quince
+import Main
+
+fn send(method: Request.Method, url: String, body: String) -> Response use State[Memory] {
+  request = Request(body:, ..Request.new(method, "http://localhost#{url}"))
+  with MemoryTodos { Quince.handle(Todos.api(), request, Todos.on_error) }
+}
+
+fn run[A](body: fn() -> A use State[Memory]) -> A {
+  (result, _) = State.run(Memory.empty(), body)
+  result
+}
+
+@test
+fn the_routes_are_well_formed() {
+  assert Quince.check(Todos.api()) == []
+}
+
+@test
+fn a_todo_is_created_renamed_and_completed() {
+  responses = run(fn() {
+    created = send(Post, "/todos", "{\"title\":\"write\"}")
+    renamed = send(Patch, "/todos/1", "{\"title\":\"write more\"}")
+    done = send(Post, "/todos/1/complete", "")
+    listed = send(Get, "/todos?done=true", "")
+    [created, renamed, done, listed]
+  })
+  assert List.map(responses, fn(r) { r.status }) == [201, 200, 200, 200]
+  assert List.map(responses, fn(r) { r.body })
+    == [
+      "{\"done\":false,\"id\":\"1\",\"title\":\"write\"}",
+      "{\"done\":false,\"id\":\"1\",\"title\":\"write more\"}",
+      "{\"done\":true,\"id\":\"1\",\"title\":\"write more\"}",
+      "[{\"done\":true,\"id\":\"1\",\"title\":\"write more\"}]",
+    ]
+}
+
+@test
+fn an_empty_title_is_400_at_title() {
+  res = run(fn() { send(Post, "/todos", "{\"title\":\"  \"}") })
+  assert res.status == 400
+  assert res.body
+    == "{\"errors\":[{\"field\":\"title\",\"message\":\"at least 1 characters\"}],\"status\":400,\"title\":\"Bad Request\"}"
+}
+
+@test
+fn a_body_of_the_wrong_shape_is_400_at_the_field() {
+  res = run(fn() { send(Post, "/todos", "{\"title\":3}") })
+  assert res.status == 400
+  assert String.contains(res.body, "\"field\":\"body.title\"")
+}
+
+@test
+fn a_missing_todo_is_404() {
+  statuses = run(fn() {
+    [send(Get, "/todos/9", "").status, send(Delete, "/todos/9", "").status]
+  })
+  assert statuses == [404, 404]
+}
+
+@test
+fn a_deleted_todo_is_gone() {
+  statuses = run(fn() {
+    send(Post, "/todos", "{\"title\":\"a\"}")
+    [send(Delete, "/todos/1", "").status, send(Get, "/todos/1", "").status]
+  })
+  assert statuses == [204, 404]
+}
+
+@test
+fn the_service_answers_with_an_empty_store() {
+  res = Main.app(Request.new(Get, "http://localhost/todos"))
+  assert (res.status, res.body) == (200, "[]")
+}

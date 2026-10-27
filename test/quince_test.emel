@@ -1,0 +1,295 @@
+import Std.Http.Request.{Request, Get, Head, Post, Put, Delete, Options}
+import Std.Http.Response.{Response}
+import Std.State.{State}
+import Dynamic.{Dynamic, Decode, Encode, Text}
+import Shape.{Shape, Shaped, Field, Record}
+import Shape.Rule.{Broken}
+import Shape.Rule
+import Lib.{Api, InvalidInput, Problem}
+
+# The inputs and outputs, with the impls that `derive Decode, Shaped` and `derive Encode` are
+# meant to generate.
+
+type ItemPath(id: Int)
+
+type Search(q: String, page: Option[Int], tags: List[String])
+
+type NewItem(body: ItemBody)
+
+type ItemBody(name: String, count: Int)
+
+type Item(id: Int, name: String)
+
+type Found(names: List[String])
+
+error ItemNotFound(id: Int)
+
+impl ItemPath: Decode {
+  fn from_dynamic(d) {
+    ItemPath(id: Dynamic.field(d, "id", Decode.from_dynamic))
+  }
+
+  fn from_dynamic_all(d) {
+    ItemPath(id: Dynamic.field_all(d, "id", Decode.from_dynamic_all))
+  }
+}
+
+impl ItemPath: Shaped {
+  fn shape_in(proxy, visiting) {
+    id: Option[Int] = None
+    Record(name: "ItemPath", fields: [Field(name: "id", shape: Shaped.shape_in(id, visiting))])
+  }
+}
+
+impl Search: Decode {
+  fn from_dynamic(d) {
+    Search(
+      q: Dynamic.field(d, "q", Decode.from_dynamic),
+      page: Dynamic.field(d, "page", Decode.from_dynamic),
+      tags: Dynamic.field(d, "tags", Decode.from_dynamic),
+    )
+  }
+}
+
+impl Search: Shaped {
+  fn shape_in(proxy, visiting) {
+    q: Option[String] = None
+    page: Option[Option[Int]] = None
+    tags: Option[List[String]] = None
+    Record(
+      name: "Search",
+      fields: [
+        Field(name: "q", shape: Shaped.shape_in(q, visiting)),
+        Field(name: "page", shape: Shaped.shape_in(page, visiting)),
+        Field(name: "tags", shape: Shaped.shape_in(tags, visiting)),
+      ],
+    )
+  }
+}
+
+impl NewItem: Decode {
+  fn from_dynamic(d) {
+    NewItem(body: Dynamic.field(d, "body", Decode.from_dynamic))
+  }
+
+  fn from_dynamic_all(d) {
+    NewItem(body: Dynamic.field_all(d, "body", Decode.from_dynamic_all))
+  }
+}
+
+impl NewItem: Shaped {
+  fn shape_in(proxy, visiting) {
+    body: Option[ItemBody] = None
+    Record(name: "NewItem", fields: [Field(name: "body", shape: Shaped.shape_in(body, visiting))])
+  }
+}
+
+impl ItemBody: Decode {
+  fn from_dynamic(d) {
+    ItemBody(
+      name: Dynamic.field(d, "name", Decode.from_dynamic),
+      count: Dynamic.field(d, "count", Decode.from_dynamic),
+    )
+  }
+
+  fn from_dynamic_all(d) {
+    name = Dynamic.attempt(fn() { Dynamic.field_all(d, "name", Decode.from_dynamic_all) })
+    count = Dynamic.attempt(fn() { Dynamic.field_all(d, "count", Decode.from_dynamic_all) })
+    (name, count) match {
+      (Dynamic.Decoded(name), Dynamic.Decoded(count)) -> ItemBody(name:, count:)
+      _ -> fail Dynamic.DecodeErrors(
+        errors: List.flatten([Dynamic.errors_of(name), Dynamic.errors_of(count)]),
+      )
+    }
+  }
+}
+
+impl ItemBody: Shaped {
+  fn shape_in(proxy, visiting) {
+    name: Option[String] = None
+    count: Option[Int] = None
+    Record(
+      name: "ItemBody",
+      fields: [
+        Field(name: "name", shape: Shaped.shape_in(name, visiting)),
+        Field(name: "count", shape: Shaped.shape_in(count, visiting)),
+      ],
+    )
+  }
+}
+
+impl Item: Encode {
+  fn to_dynamic(self) {
+    Dynamic.object([("id", Encode.to_dynamic(self.id)), ("name", Encode.to_dynamic(self.name))])
+  }
+}
+
+impl Found: Encode {
+  fn to_dynamic(self) {
+    Dynamic.object([("names", Encode.to_dynamic(self.names))])
+  }
+}
+
+# The handlers.
+
+fn show(input: ItemPath) -> Item fails ItemNotFound {
+  if input.id == 1 { Item(id: 1, name: "one") } else { fail ItemNotFound(id: input.id) }
+}
+
+fn search(input: Search) -> Found {
+  Found(names: List.append([input.q, "page #{Option.or(input.page, 1)}"], input.tags))
+}
+
+fn create(input: NewItem) -> Item fails InvalidInput {
+  name = Lib.field("name", fn() { Rule.check(input.body.name, [Rule.min_length(1)]) })
+  Item(id: input.body.count, name:)
+}
+
+fn remove(input: ItemPath) -> () fails ItemNotFound {
+  show(input)
+  ()
+}
+
+fn api() -> Api[ItemNotFound, {}] {
+  Lib.new()
+    |> Lib.get("/items/:id", show)
+    |> Lib.get("/search", search)
+    |> Lib.route(Post, "/items", 201, create)
+    |> Lib.delete("/items/:id", remove)
+}
+
+fn on_error(run: fn() -> Response fails ItemNotFound) -> Response {
+  run() escape {
+    ItemNotFound(id: _) -> Lib.problem(404, "item not found")
+  }
+}
+
+fn call(request: Request) -> Response {
+  Lib.handle(api(), request, on_error)
+}
+
+fn get(url: String) -> Response {
+  call(Request.new(Get, "http://localhost#{url}"))
+}
+
+fn post(url: String, body: String) -> Response {
+  call(Request(body:, ..Request.new(Post, "http://localhost#{url}")))
+}
+
+@test
+fn the_routes_are_well_formed() {
+  assert Lib.check(api()) == []
+}
+
+@test
+fn a_path_parameter_is_read_as_a_number() {
+  res = get("/items/1")
+  assert (res.status, res.body) == (200, "{\"id\":1,\"name\":\"one\"}")
+  assert Response.header(res, "content-type") == Some("application/json")
+}
+
+@test
+fn an_error_of_a_handler_goes_to_on_error() {
+  res = get("/items/2")
+  assert res.status == 404
+  assert Response.header(res, "content-type") == Some("application/problem+json")
+}
+
+@test
+fn a_path_parameter_that_is_not_a_number_is_400() {
+  res = get("/items/x")
+  assert res.status == 400
+  assert res.body
+    == "{\"errors\":[{\"field\":\"id\",\"message\":\"expected number, found text\"}],\"status\":400,\"title\":\"Bad Request\"}"
+}
+
+@test
+fn the_query_fills_the_other_fields() {
+  res = get("/search?q=a&tags=x&tags=y")
+  assert res.body == "{\"names\":[\"a\",\"page 1\",\"x\",\"y\"]}"
+  assert get("/search?q=a&page=3").body == "{\"names\":[\"a\",\"page 3\"]}"
+}
+
+@test
+fn a_missing_query_field_is_400() {
+  assert get("/search").status == 400
+}
+
+@test
+fn the_body_is_read_as_json_with_every_failure() {
+  res = post("/items", "{\"name\":\"n\",\"count\":7}")
+  assert (res.status, res.body) == (201, "{\"id\":7,\"name\":\"n\"}")
+  bad = post("/items", "{\"name\":1}")
+  assert bad.status == 400
+  assert bad.body
+    == "{\"errors\":[{\"field\":\"body.name\",\"message\":\"expected text, found number\"},{\"field\":\"body.count\",\"message\":\"expected number, found null\"}],\"status\":400,\"title\":\"Bad Request\"}"
+}
+
+@test
+fn a_body_that_is_not_json_is_400() {
+  res = post("/items", "{")
+  assert res.status == 400
+}
+
+@test
+fn a_broken_rule_in_the_handler_is_400_at_its_field() {
+  res = post("/items", "{\"name\":\"\",\"count\":1}")
+  assert res.status == 400
+  assert String.contains(res.body, "\"field\":\"name\"")
+}
+
+@test
+fn a_handler_without_output_is_204() {
+  res = call(Request.new(Delete, "http://localhost/items/1"))
+  assert (res.status, res.body) == (204, "")
+}
+
+@test
+fn an_unknown_path_is_404() {
+  assert get("/nothing").status == 404
+}
+
+@test
+fn a_method_the_path_does_not_take_is_405_with_allow() {
+  res = call(Request.new(Put, "http://localhost/items/1"))
+  assert res.status == 405
+  assert Response.header(res, "allow") == Some("GET, DELETE, HEAD, OPTIONS")
+}
+
+@test
+fn head_runs_get_without_the_body() {
+  res = call(Request.new(Head, "http://localhost/items/1"))
+  assert (res.status, res.body) == (200, "")
+}
+
+@test
+fn options_lists_the_methods() {
+  res = call(Request.new(Options, "http://localhost/items/1"))
+  assert res.status == 204
+  assert Response.header(res, "allow") == Some("GET, DELETE, HEAD, OPTIONS")
+}
+
+type Wrong(name: String)
+
+impl Wrong: Decode {
+  fn from_dynamic(d) {
+    Wrong(name: Dynamic.field(d, "name", Decode.from_dynamic))
+  }
+}
+
+impl Wrong: Shaped {
+  fn shape_in(proxy, visiting) {
+    name: Option[String] = None
+    Record(name: "Wrong", fields: [Field(name: "name", shape: Shaped.shape_in(name, visiting))])
+  }
+}
+
+fn wrong(input: Wrong) -> Item {
+  Item(id: 0, name: input.name)
+}
+
+@test
+fn check_finds_a_parameter_without_a_field() {
+  bad: Api[ItemNotFound, {}] = Lib.new() |> Lib.get("/wrong/:id", wrong)
+  assert Lib.check(bad) == ["GET /wrong/:id: the input `Wrong` has no field `id`"]
+}
