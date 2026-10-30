@@ -166,7 +166,7 @@ fn call(request: Request) -> Response {
   Lib.handle(api(), request, on_error)
 }
 
-fn fetch(url: String) -> Response {
+fn get(url: String) -> Response {
   call(Request.new(Get, "http://localhost#{url}"))
 }
 
@@ -181,21 +181,21 @@ fn the_routes_are_well_formed() {
 
 @test
 fn a_path_parameter_is_read_as_a_number() {
-  res = fetch("/items/1")
+  res = get("/items/1")
   assert (res.status, res.body) == (200, "{\"id\":1,\"name\":\"one\"}")
   assert res.header("content-type") == Some("application/json")
 }
 
 @test
 fn an_error_of_a_handler_goes_to_on_error() {
-  res = fetch("/items/2")
+  res = get("/items/2")
   assert res.status == 404
   assert res.header("content-type") == Some("application/problem+json")
 }
 
 @test
 fn a_path_parameter_that_is_not_a_number_is_400() {
-  res = fetch("/items/x")
+  res = get("/items/x")
   assert res.status == 400
   assert res.body
     == "{\"errors\":[{\"field\":\"id\",\"message\":\"expected number, found text\"}],\"status\":400,\"title\":\"Bad Request\"}"
@@ -203,14 +203,14 @@ fn a_path_parameter_that_is_not_a_number_is_400() {
 
 @test
 fn the_query_fills_the_other_fields() {
-  res = fetch("/search?q=a&tags=x&tags=y")
+  res = get("/search?q=a&tags=x&tags=y")
   assert res.body == "{\"names\":[\"a\",\"page 1\",\"x\",\"y\"]}"
-  assert fetch("/search?q=a&page=3").body == "{\"names\":[\"a\",\"page 3\"]}"
+  assert get("/search?q=a&page=3").body == "{\"names\":[\"a\",\"page 3\"]}"
 }
 
 @test
 fn a_missing_query_field_is_400() {
-  assert fetch("/search").status == 400
+  assert get("/search").status == 400
 }
 
 @test
@@ -244,7 +244,7 @@ fn a_handler_without_output_is_204() {
 
 @test
 fn an_unknown_path_is_404() {
-  assert fetch("/nothing").status == 404
+  assert get("/nothing").status == 404
 }
 
 @test
