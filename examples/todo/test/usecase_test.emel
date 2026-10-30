@@ -31,7 +31,7 @@ fn the_list_is_filtered_by_done() {
       Todos.list(Some(False))
     }
   })
-  assert List.map(open, fn(t) { Todo.title_text(t.title) }) == ["a"]
+  assert open.map(fn(t) { Todo.title_text(t.title) }) == ["a"]
 }
 
 @test

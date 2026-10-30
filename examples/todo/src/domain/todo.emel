@@ -23,7 +23,7 @@ pub effect TodoStore {
 
 ## A title: 1 to 100 characters after trimming.
 pub fn title(s: String) -> Title fails Broken {
-  Title(value: Rule.check(String.trim(s), TITLE))
+  Title(value: Rule.check(s.trim(), TITLE))
 }
 
 pub fn todo_id(s: String) -> TodoId fails Broken {
@@ -32,7 +32,7 @@ pub fn todo_id(s: String) -> TodoId fails Broken {
 
 ## The id numbered `n`, for stores that count.
 pub fn numbered(n: Int) -> TodoId {
-  TodoId(value: Int.to_string(n))
+  TodoId(value: n.to_string())
 }
 
 pub fn id_text(id: TodoId) -> String {

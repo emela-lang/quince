@@ -141,17 +141,17 @@ pub fn handle[E, R](
   request: Request,
   on_error: fn(fn() -> Response fails E use R) -> Response use R,
 ) -> Response use R {
-  segments = Request.segments(request)
-  found = List.filter_map(api.routes, fn(r) {
-    Pattern.matches(r.pattern, segments) |> Option.map(fn(params) { (r, params) })
+  segments = request.segments()
+  found = api.routes.filter_map(fn(r) {
+    r.pattern.matches(segments).map(fn(params) { (r, params) })
   })
   method = request.method
-  exact = List.find(found, fn((r, _)) { r.method == method })
+  exact = found.find(fn((r, _)) { r.method == method })
   chosen = (exact, method) match {
-    (None, Head) -> List.find(found, fn((r, _)) { r.method == Get })
+    (None, Head) -> found.find(fn((r, _)) { r.method == Get })
     _            -> exact
   }
-  if List.is_empty(found) {
+  if found.is_empty() {
     problem(404, "Not Found")
   } else {
     (chosen, method) match {
@@ -164,8 +164,8 @@ pub fn handle[E, R](
         })
         if method == Head { Response(body: "", ..response) } else { response }
       }
-      (None, Options) -> Response.new(204, "") |> Response.add_header("allow", allow(found))
-      (None, _) -> problem(405, "Method Not Allowed") |> Response.add_header("allow", allow(found))
+      (None, Options) -> Response.new(204, "").add_header("allow", allow(found))
+      (None, _)       -> problem(405, "Method Not Allowed").add_header("allow", allow(found))
     }
   }
 }
@@ -174,16 +174,14 @@ pub fn handle[E, R](
 ## type has no field for, or an input type that is not a record. Call it from a test, as the
 ## routes are built again for each request.
 pub fn check[E, R](api: Api[E, R]) -> List[String] {
-  List.flat_map(api.routes, fn(r) {
+  api.routes.flat_map(fn(r) {
     label = "#{method_name(r.method)} #{r.pattern.text}"
-    if List.is_empty(Shape.field_names(r.input)) && !List.is_empty(Pattern.names(r.pattern)) {
-      ["#{label}: the input `#{Shape.name_of(r.input)}` is not a record with fields"]
+    if r.input.field_names().is_empty() && !r.pattern.names().is_empty() {
+      ["#{label}: the input `#{r.input.name_of()}` is not a record with fields"]
     } else {
-      Pattern.names(r.pattern)
-        |> List.filter(fn(name) { !Input.has_field(r.input, name) })
-        |> List.map(fn(name) {
-          "#{label}: the input `#{Shape.name_of(r.input)}` has no field `#{name}`"
-        })
+      r.pattern.names().filter(fn(name) { !Input.has_field(r.input, name) }).map(fn(name) {
+        "#{label}: the input `#{r.input.name_of()}` has no field `#{name}`"
+      })
     }
   })
 }
@@ -196,7 +194,7 @@ pub fn field[A, E](name: String, read: fn() -> A fails Broken | AllBroken | Pars
   read() escape {
     Broken(message:) -> fail InvalidInput(problems: [Problem(field: name, message:)])
     AllBroken(messages:) -> fail InvalidInput(
-      problems: List.map(messages, fn(message) { Problem(field: name, message:) }),
+      problems: messages.map(fn(message) { Problem(field: name, message:) }),
     )
     ParseError(input:) -> fail InvalidInput(
       problems: [Problem(field: name, message: "cannot be read: `#{input}`")],
@@ -206,8 +204,7 @@ pub fn field[A, E](name: String, read: fn() -> A fails Broken | AllBroken | Pars
 
 ## `value` as JSON, with `content-type: application/json`.
 pub fn json[A: Encode](status: Int, value: A) -> Response {
-  Response.new(status, Json.encode(value))
-    |> Response.add_header("content-type", "application/json")
+  Response.new(status, Json.encode(value)).add_header("content-type", "application/json")
 }
 
 ## A problem response (RFC 9457) with `title`, in `application/problem+json`.
@@ -217,7 +214,7 @@ pub fn problem(status: Int, title: String) -> Response {
 
 ## The 400 response for `problems`: a problem response with the problems under `errors`.
 pub fn invalid(problems: List[Problem]) -> Response {
-  errors = List.map(problems, fn(p) {
+  errors = problems.map(fn(p) {
     Dynamic.object([("field", Dynamic.Text(p.field)), ("message", Dynamic.Text(p.message))])
   })
   problem_with(400, "Bad Request", [("errors", Dynamic.Items(errors))])
@@ -225,8 +222,10 @@ pub fn invalid(problems: List[Problem]) -> Response {
 
 fn problem_with(status: Int, title: String, extra: List[(String, Dynamic)]) -> Response {
   fields = [("status", Encode.to_dynamic(status)), ("title", Dynamic.Text(title))]
-  Response.new(status, Json.to_string(Dynamic.object(List.append(fields, extra))))
-    |> Response.add_header("content-type", "application/problem+json")
+  Response.new(status, Json.to_string(Dynamic.object(fields.append(extra)))).add_header(
+    "content-type",
+    "application/problem+json",
+  )
 }
 
 fn add[E, R](
@@ -237,7 +236,7 @@ fn add[E, R](
   run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | E use R,
 ) -> Api[E, R] {
   route = Route(method:, pattern: Pattern.parse(pattern), input:, run:)
-  Api(routes: List.append(api.routes, [route]))
+  Api(routes: api.routes.append([route]))
 }
 
 ## The input of a route: the fields from the path and the query, and `body` from the JSON body if
@@ -254,37 +253,30 @@ fn read[I: Decode](shape: Shape, request: Request, params: List[(String, String)
   } else {
     []
   }
-  fields = List.append(Input.fields(shape, params, Request.query(request)), body)
+  fields = Input.fields(shape, params, request.query()).append(body)
   Decode.from_dynamic_all(Dynamic.object(fields)) escape {
-    DecodeErrors(errors:) -> fail InvalidInput(problems: List.map(errors, problem_of))
+    DecodeErrors(errors:) -> fail InvalidInput(problems: errors.map(problem_of))
   }
 }
 
 fn problem_of(e: DecodeError) -> Problem {
-  field = List.fold(e.path, from: "", f: fn(acc, segment) {
+  field = e.path.fold(from: "", f: fn(acc, segment) {
     (acc, segment) match {
       ("", Key(key)) -> key
       (_, Key(key))  -> "#{acc}.#{key}"
       (_, Index(i))  -> "#{acc}[#{i}]"
     }
   })
-  Problem(field:, message: "expected #{e.expected}, found #{Dynamic.kind(e.actual)}")
+  Problem(field:, message: "expected #{e.expected}, found #{e.actual.kind()}")
 }
 
 ## The methods that the routes in `found` take, for `allow`: HEAD with GET, and OPTIONS.
 fn allow[E, R](found: List[(Route[E, R], List[(String, String)])]) -> String {
-  methods = List.map(found, fn((r, _)) { r.method })
-  with_head = if List.any(methods, fn(m) { m == Get }) {
-    List.append(methods, [Head])
-  } else {
-    methods
-  }
-  List.append(with_head, [Options])
-    |> List.fold(from: [], f: fn(acc, m) {
-      if List.any(acc, fn(n) { n == m }) { acc } else { List.append(acc, [m]) }
-    })
-    |> List.map(method_name)
-    |> String.join(", ")
+  methods = found.map(fn((r, _)) { r.method })
+  with_head = if methods.any(fn(m) { m == Get }) { methods.append([Head]) } else { methods }
+  with_head.append([Options]).fold(from: [], f: fn(acc, m) {
+    if acc.any(fn(n) { n == m }) { acc } else { acc.append([m]) }
+  }).map(method_name).join(", ")
 }
 
 fn method_name(method: Method) -> String {

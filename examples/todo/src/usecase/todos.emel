@@ -13,7 +13,7 @@ pub fn create(title: Title) -> Todo use TodoStore {
 pub fn list(done: Option[Bool]) -> List[Todo] use TodoStore {
   todos = (use TodoStore).all()
   done match {
-    Some(d) -> List.filter(todos, fn(t) { t.done == d })
+    Some(d) -> todos.filter(fn(t) { t.done == d })
     None    -> todos
   }
 }
