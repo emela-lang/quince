@@ -40,7 +40,7 @@ pub fn on_error[R](run: fn() -> Response fails TodoNotFound use R) -> Response u
 }
 
 fn list(input: ListQuery) -> List[TodoView] use TodoStore {
-  List.map(Todos.list(input.done), view)
+  Todos.list(input.done).map(view)
 }
 
 fn create(input: CreateTodo) -> TodoView fails InvalidInput use TodoStore {
@@ -78,7 +78,7 @@ fn view(todo: Todo) -> TodoView {
 
 impl TodoPath: Decode {
   fn from_dynamic(d) {
-    TodoPath(id: Dynamic.field(d, "id", Decode.from_dynamic))
+    TodoPath(id: d.field("id", Decode.from_dynamic))
   }
 }
 
@@ -91,7 +91,7 @@ impl TodoPath: Shaped {
 
 impl ListQuery: Decode {
   fn from_dynamic(d) {
-    ListQuery(done: Dynamic.field(d, "done", Decode.from_dynamic))
+    ListQuery(done: d.field("done", Decode.from_dynamic))
   }
 }
 
@@ -104,7 +104,7 @@ impl ListQuery: Shaped {
 
 impl TodoBody: Decode {
   fn from_dynamic(d) {
-    TodoBody(title: Dynamic.field(d, "title", Decode.from_dynamic))
+    TodoBody(title: d.field("title", Decode.from_dynamic))
   }
 }
 
@@ -120,11 +120,11 @@ impl TodoBody: Shaped {
 
 impl CreateTodo: Decode {
   fn from_dynamic(d) {
-    CreateTodo(body: Dynamic.field(d, "body", Decode.from_dynamic))
+    CreateTodo(body: d.field("body", Decode.from_dynamic))
   }
 
   fn from_dynamic_all(d) {
-    CreateTodo(body: Dynamic.field_all(d, "body", Decode.from_dynamic_all))
+    CreateTodo(body: d.field_all("body", Decode.from_dynamic_all))
   }
 }
 
@@ -140,18 +140,15 @@ impl CreateTodo: Shaped {
 
 impl RenameTodo: Decode {
   fn from_dynamic(d) {
-    RenameTodo(
-      id: Dynamic.field(d, "id", Decode.from_dynamic),
-      body: Dynamic.field(d, "body", Decode.from_dynamic),
-    )
+    RenameTodo(id: d.field("id", Decode.from_dynamic), body: d.field("body", Decode.from_dynamic))
   }
 
   fn from_dynamic_all(d) {
-    id = Dynamic.attempt(fn() { Dynamic.field_all(d, "id", Decode.from_dynamic_all) })
-    body = Dynamic.attempt(fn() { Dynamic.field_all(d, "body", Decode.from_dynamic_all) })
+    id = Dynamic.attempt(fn() { d.field_all("id", Decode.from_dynamic_all) })
+    body = Dynamic.attempt(fn() { d.field_all("body", Decode.from_dynamic_all) })
     (id, body) match {
       (Decoded(id), Decoded(body)) -> RenameTodo(id:, body:)
-      _ -> fail DecodeErrors(errors: List.append(Dynamic.errors_of(id), Dynamic.errors_of(body)))
+      _ -> fail DecodeErrors(errors: id.errors_of().append(body.errors_of()))
     }
   }
 }

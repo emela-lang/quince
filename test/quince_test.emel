@@ -26,11 +26,11 @@ error ItemNotFound(id: Int)
 
 impl ItemPath: Decode {
   fn from_dynamic(d) {
-    ItemPath(id: Dynamic.field(d, "id", Decode.from_dynamic))
+    ItemPath(id: d.field("id", Decode.from_dynamic))
   }
 
   fn from_dynamic_all(d) {
-    ItemPath(id: Dynamic.field_all(d, "id", Decode.from_dynamic_all))
+    ItemPath(id: d.field_all("id", Decode.from_dynamic_all))
   }
 }
 
@@ -44,9 +44,9 @@ impl ItemPath: Shaped {
 impl Search: Decode {
   fn from_dynamic(d) {
     Search(
-      q: Dynamic.field(d, "q", Decode.from_dynamic),
-      page: Dynamic.field(d, "page", Decode.from_dynamic),
-      tags: Dynamic.field(d, "tags", Decode.from_dynamic),
+      q: d.field("q", Decode.from_dynamic),
+      page: d.field("page", Decode.from_dynamic),
+      tags: d.field("tags", Decode.from_dynamic),
     )
   }
 }
@@ -69,11 +69,11 @@ impl Search: Shaped {
 
 impl NewItem: Decode {
   fn from_dynamic(d) {
-    NewItem(body: Dynamic.field(d, "body", Decode.from_dynamic))
+    NewItem(body: d.field("body", Decode.from_dynamic))
   }
 
   fn from_dynamic_all(d) {
-    NewItem(body: Dynamic.field_all(d, "body", Decode.from_dynamic_all))
+    NewItem(body: d.field_all("body", Decode.from_dynamic_all))
   }
 }
 
@@ -87,19 +87,17 @@ impl NewItem: Shaped {
 impl ItemBody: Decode {
   fn from_dynamic(d) {
     ItemBody(
-      name: Dynamic.field(d, "name", Decode.from_dynamic),
-      count: Dynamic.field(d, "count", Decode.from_dynamic),
+      name: d.field("name", Decode.from_dynamic),
+      count: d.field("count", Decode.from_dynamic),
     )
   }
 
   fn from_dynamic_all(d) {
-    name = Dynamic.attempt(fn() { Dynamic.field_all(d, "name", Decode.from_dynamic_all) })
-    count = Dynamic.attempt(fn() { Dynamic.field_all(d, "count", Decode.from_dynamic_all) })
+    name = Dynamic.attempt(fn() { d.field_all("name", Decode.from_dynamic_all) })
+    count = Dynamic.attempt(fn() { d.field_all("count", Decode.from_dynamic_all) })
     (name, count) match {
       (Dynamic.Decoded(name), Dynamic.Decoded(count)) -> ItemBody(name:, count:)
-      _ -> fail Dynamic.DecodeErrors(
-        errors: List.flatten([Dynamic.errors_of(name), Dynamic.errors_of(count)]),
-      )
+      _ -> fail Dynamic.DecodeErrors(errors: name.errors_of().append(count.errors_of()))
     }
   }
 }
@@ -137,7 +135,7 @@ fn show(input: ItemPath) -> Item fails ItemNotFound {
 }
 
 fn search(input: Search) -> Found {
-  Found(names: List.append([input.q, "page #{Option.or(input.page, 1)}"], input.tags))
+  Found(names: [input.q, "page #{input.page.or(1)}"].append(input.tags))
 }
 
 fn create(input: NewItem) -> Item fails InvalidInput {
@@ -185,14 +183,14 @@ fn the_routes_are_well_formed() {
 fn a_path_parameter_is_read_as_a_number() {
   res = get("/items/1")
   assert (res.status, res.body) == (200, "{\"id\":1,\"name\":\"one\"}")
-  assert Response.header(res, "content-type") == Some("application/json")
+  assert res.header("content-type") == Some("application/json")
 }
 
 @test
 fn an_error_of_a_handler_goes_to_on_error() {
   res = get("/items/2")
   assert res.status == 404
-  assert Response.header(res, "content-type") == Some("application/problem+json")
+  assert res.header("content-type") == Some("application/problem+json")
 }
 
 @test
@@ -235,7 +233,7 @@ fn a_body_that_is_not_json_is_400() {
 fn a_broken_rule_in_the_handler_is_400_at_its_field() {
   res = post("/items", "{\"name\":\"\",\"count\":1}")
   assert res.status == 400
-  assert String.contains(res.body, "\"field\":\"name\"")
+  assert res.body.contains("\"field\":\"name\"")
 }
 
 @test
@@ -253,7 +251,7 @@ fn an_unknown_path_is_404() {
 fn a_method_the_path_does_not_take_is_405_with_allow() {
   res = call(Request.new(Put, "http://localhost/items/1"))
   assert res.status == 405
-  assert Response.header(res, "allow") == Some("GET, DELETE, HEAD, OPTIONS")
+  assert res.header("allow") == Some("GET, DELETE, HEAD, OPTIONS")
 }
 
 @test
@@ -266,14 +264,14 @@ fn head_runs_get_without_the_body() {
 fn options_lists_the_methods() {
   res = call(Request.new(Options, "http://localhost/items/1"))
   assert res.status == 204
-  assert Response.header(res, "allow") == Some("GET, DELETE, HEAD, OPTIONS")
+  assert res.header("allow") == Some("GET, DELETE, HEAD, OPTIONS")
 }
 
 type Wrong(name: String)
 
 impl Wrong: Decode {
   fn from_dynamic(d) {
-    Wrong(name: Dynamic.field(d, "name", Decode.from_dynamic))
+    Wrong(name: d.field("name", Decode.from_dynamic))
   }
 }
 

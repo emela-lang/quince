@@ -10,21 +10,19 @@ pub type Pattern(text: String, parts: List[Part]) derive Eq
 
 ## The pattern of `text`. Empty segments are dropped, so `/todos/` is `/todos`.
 pub fn parse(text: String) -> Pattern {
-  parts = String.split(text, "/")
-    |> List.filter(fn(s) { s != "" })
-    |> List.map(fn(s) {
-      if String.starts_with(s, ":") {
-        Param(String.chars(s) |> List.drop(1) |> String.concat)
-      } else {
-        Literal(s)
-      }
-    })
+  parts = text.split("/").filter(fn(s) { s != "" }).map(fn(s) {
+    if s.starts_with(":") {
+      Param(s.chars().drop(1).join(""))
+    } else {
+      Literal(s)
+    }
+  })
   Pattern(text:, parts:)
 }
 
 ## The names of the parameters, in order.
 pub fn names(pattern: Pattern) -> List[String] {
-  List.filter_map(pattern.parts, fn(part) {
+  pattern.parts.filter_map(fn(part) {
     part match {
       Param(name) -> Some(name)
       Literal(_)  -> None
@@ -35,13 +33,13 @@ pub fn names(pattern: Pattern) -> List[String] {
 ## The parameters taken from `segments` (percent-decoded, as `Request.segments` gives them), or
 ## `None` if the path does not match.
 pub fn matches(pattern: Pattern, segments: List[String]) -> Option[List[(String, String)]] {
-  if List.length(pattern.parts) != List.length(segments) {
+  if pattern.parts.length() != segments.length() {
     None
   } else {
-    List.zip(pattern.parts, segments) |> List.fold(from: Some([]), f: fn(acc, (part, segment)) {
+    pattern.parts.zip(segments).fold(from: Some([]), f: fn(acc, (part, segment)) {
       (acc, part) match {
         (None, _)                       -> None
-        (Some(found), Param(name))      -> Some(List.append(found, [(name, segment)]))
+        (Some(found), Param(name))      -> Some(found.append([(name, segment)]))
         (Some(found), Literal(literal)) -> if literal == segment { Some(found) } else { None }
       }
     })

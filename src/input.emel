@@ -18,8 +18,8 @@ pub fn fields(
   params: List[(String, String)],
   query: List[(String, String)],
 ) -> List[(String, Dynamic)] {
-  Shape.strip(shape) match {
-    Record(name: _, fields:) -> List.filter_map(fields, fn(field) {
+  shape.strip() match {
+    Record(name: _, fields:) -> fields.filter_map(fn(field) {
       if field.name == "body" {
         None
       } else {
@@ -27,8 +27,8 @@ pub fn fields(
           []     -> lookup(query, field.name)
           values -> values
         }
-        if List.is_empty(values) {
-          absent(field.shape) |> Option.map(fn(d) { (field.name, d) })
+        if values.is_empty() {
+          absent(field.shape).map(fn(d) { (field.name, d) })
         } else {
           Some((field.name, from_text(field.shape, values)))
         }
@@ -40,25 +40,25 @@ pub fn fields(
 
 ## Whether `shape` has a field `name`.
 pub fn has_field(shape: Shape, name: String) -> Bool {
-  List.any(Shape.field_names(shape), fn(n) { n == name })
+  shape.field_names().any(fn(n) { n == name })
 }
 
 fn absent(shape: Shape) -> Option[Dynamic] {
-  Shape.strip(shape) match {
+  shape.strip() match {
     Shape.List(_) -> Some(Items([]))
     _             -> None
   }
 }
 
 fn lookup(pairs: List[(String, String)], name: String) -> List[String] {
-  List.filter_map(pairs, fn((key, value)) { if key == name { Some(value) } else { None } })
+  pairs.filter_map(fn((key, value)) { if key == name { Some(value) } else { None } })
 }
 
 ## `values` (at least one) as the kind of value `shape` holds.
 fn from_text(shape: Shape, values: List[String]) -> Dynamic {
-  first = List.head(values) |> Option.or("")
-  Shape.strip(shape) match {
-    Shape.List(item)    -> Items(List.map(values, fn(v) { from_text(item, [v]) }))
+  first = values.head().or("")
+  shape.strip() match {
+    Shape.List(item)    -> Items(values.map(fn(v) { from_text(item, [v]) }))
     Shape.Option(inner) -> from_text(inner, values)
     Shape.Int           -> number(first)
     Shape.Int64         -> number(first)

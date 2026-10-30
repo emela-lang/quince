@@ -33,8 +33,8 @@ fn a_todo_is_created_renamed_and_completed() {
     listed = send(Get, "/todos?done=true", "")
     [created, renamed, done, listed]
   })
-  assert List.map(responses, fn(r) { r.status }) == [201, 200, 200, 200]
-  assert List.map(responses, fn(r) { r.body })
+  assert responses.map(fn(r) { r.status }) == [201, 200, 200, 200]
+  assert responses.map(fn(r) { r.body })
     == [
       "{\"done\":false,\"id\":\"1\",\"title\":\"write\"}",
       "{\"done\":false,\"id\":\"1\",\"title\":\"write more\"}",
@@ -55,7 +55,7 @@ fn an_empty_title_is_400_at_title() {
 fn a_body_of_the_wrong_shape_is_400_at_the_field() {
   res = run(fn() { send(Post, "/todos", "{\"title\":3}") })
   assert res.status == 400
-  assert String.contains(res.body, "\"field\":\"body.title\"")
+  assert res.body.contains("\"field\":\"body.title\"")
 }
 
 @test

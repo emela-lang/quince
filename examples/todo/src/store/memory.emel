@@ -19,8 +19,7 @@ pub handler MemoryTodos: TodoStore {
   }
 
   fn find(id) {
-    List.find((use State[Memory]).get().todos, fn(t) { t.id == id })
-      |> Option.or_fail(TodoNotFound(id:))
+    (use State[Memory]).get().todos.find(fn(t) { t.id == id }).or_fail(TodoNotFound(id:))
   }
 
   fn all() {
@@ -29,17 +28,15 @@ pub handler MemoryTodos: TodoStore {
 
   fn save(todo) {
     (use State[Memory]).update(fn(m) {
-      others = List.filter(m.todos, fn(t) { t.id != todo.id })
-      Memory(todos: List.append(others, [todo]), ..m)
+      others = m.todos.filter(fn(t) { t.id != todo.id })
+      Memory(todos: others.append([todo]), ..m)
     })
   }
 
   fn remove(id) {
     memory = (use State[Memory]).get()
-    if List.any(memory.todos, fn(t) { t.id == id }) {
-      (use State[Memory]).set(
-        Memory(todos: List.filter(memory.todos, fn(t) { t.id != id }), ..memory),
-      )
+    if memory.todos.any(fn(t) { t.id == id }) {
+      (use State[Memory]).set(Memory(todos: memory.todos.filter(fn(t) { t.id != id }), ..memory))
     } else {
       fail TodoNotFound(id:)
     }
