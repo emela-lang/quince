@@ -5,7 +5,7 @@ import Dynamic.{Dynamic, Decode, Encode, Text}
 import Shape.{Shape, Shaped, Field, Record}
 import Shape.Rule.{Broken}
 import Shape.Rule
-import Lib.{Api, InvalidInput, Problem}
+import Lib.{Api, InvalidInput, HttpError, Problem}
 
 # The inputs and outputs, with the impls that `derive Decode, Shaped` and `derive Encode` are
 # meant to generate.
@@ -130,8 +130,14 @@ impl Found: Encode {
 
 # The handlers.
 
-fn show(input: ItemPath) -> Item fails ItemNotFound {
-  if input.id == 1 { Item(id: 1, name: "one") } else { fail ItemNotFound(id: input.id) }
+fn find(id: Int) -> Item fails ItemNotFound {
+  if id == 1 { Item(id: 1, name: "one") } else { fail ItemNotFound(id:) }
+}
+
+fn show(input: ItemPath) -> Item fails HttpError {
+  find(input.id) escape {
+    ItemNotFound(..) -> fail HttpError(status: 404, title: "item not found")
+  }
 }
 
 fn search(input: Search) -> Found {
@@ -143,12 +149,12 @@ fn create(input: NewItem) -> Item fails InvalidInput {
   Item(id: input.body.count, name:)
 }
 
-fn remove(input: ItemPath) -> () fails ItemNotFound {
+fn remove(input: ItemPath) -> () fails HttpError {
   show(input)
   ()
 }
 
-fn api() -> Api[ItemNotFound, {}] {
+fn api() -> Api[{}] {
   Lib.new()
     |> Lib.get("/items/:id", show)
     |> Lib.get("/search", search)
@@ -156,14 +162,8 @@ fn api() -> Api[ItemNotFound, {}] {
     |> Lib.delete("/items/:id", remove)
 }
 
-fn on_error(run: fn() -> Response fails ItemNotFound) -> Response {
-  run() escape {
-    ItemNotFound(id: _) -> Lib.problem(404, "item not found")
-  }
-}
-
 fn call(request: Request) -> Response {
-  Lib.handle(api(), request, on_error)
+  Lib.handle(api(), request)
 }
 
 fn get(url: String) -> Response {
@@ -187,10 +187,17 @@ fn a_path_parameter_is_read_as_a_number() {
 }
 
 @test
-fn an_error_of_a_handler_goes_to_on_error() {
+fn an_http_error_of_a_handler_is_its_status() {
   res = get("/items/2")
   assert res.status == 404
+  assert res.body == "{\"status\":404,\"title\":\"item not found\"}"
   assert res.header("content-type") == Some("application/problem+json")
+}
+
+@test
+fn head_of_an_http_error_has_no_body() {
+  res = call(Request.new(Head, "http://localhost/items/2"))
+  assert (res.status, res.body) == (404, "")
 }
 
 @test
@@ -288,6 +295,6 @@ fn wrong(input: Wrong) -> Item {
 
 @test
 fn check_finds_a_parameter_without_a_field() {
-  bad: Api[ItemNotFound, {}] = Lib.new() |> Lib.get("/wrong/:id", wrong)
+  bad: Api[{}] = Lib.new() |> Lib.get("/wrong/:id", wrong)
   assert Lib.check(bad) == ["GET /wrong/:id: the input `Wrong` has no field `id`"]
 }

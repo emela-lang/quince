@@ -16,7 +16,7 @@ import Quince
 @entry(Http.serve)
 pub fn app(request: Request) -> Response {
   (response, _) = State.run(Memory.empty(), fn() {
-    with MemoryTodos { Quince.handle(Todos.api(), request, Todos.on_error) }
+    with MemoryTodos { Quince.handle(Todos.api(), request) }
   })
   response
 }

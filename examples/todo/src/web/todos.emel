@@ -2,10 +2,9 @@
 # into domain values and back. Only this module knows the paths and the JSON.
 
 import Std.Http.Request.{Post}
-import Std.Http.Response.{Response}
 import Dynamic.{Dynamic, Decode, Encode, Decoded, DecodeErrors}
 import Shape.{Shaped, Field, Record}
-import Quince.{Api, InvalidInput}
+import Quince.{Api, InvalidInput, HttpError}
 import Domain.Todo.{Todo, TodoStore, TodoNotFound}
 import Domain.Todo
 import Usecase.Todos
@@ -22,7 +21,7 @@ type RenameTodo(id: String, body: TodoBody)
 
 type TodoView(id: String, title: String, done: Bool)
 
-pub fn api() -> Api[TodoNotFound, { TodoStore }] {
+pub fn api() -> Api[TodoStore] {
   Quince.new()
     |> Quince.get("/todos", list)
     |> Quince.route(Post, "/todos", 201, create)
@@ -30,13 +29,6 @@ pub fn api() -> Api[TodoNotFound, { TodoStore }] {
     |> Quince.patch("/todos/:id", rename)
     |> Quince.post("/todos/:id/complete", complete)
     |> Quince.delete("/todos/:id", remove)
-}
-
-## The responses for the errors of the use cases. `escape` makes sure none is left out.
-pub fn on_error[R](run: fn() -> Response fails TodoNotFound use R) -> Response use R {
-  run() escape {
-    TodoNotFound(id: _) -> Quince.problem(404, "todo not found")
-  }
 }
 
 fn list(input: ListQuery) -> List[TodoView] use TodoStore {
@@ -48,21 +40,33 @@ fn create(input: CreateTodo) -> TodoView fails InvalidInput use TodoStore {
   view(Todos.create(title))
 }
 
-fn show(input: TodoPath) -> TodoView fails InvalidInput | TodoNotFound use TodoStore {
-  view(Todos.get(id(input.id)))
+fn show(input: TodoPath) -> TodoView fails InvalidInput | HttpError use TodoStore {
+  view(Todos.get(id(input.id))) escape {
+    TodoNotFound(..) -> fail not_found()
+  }
 }
 
-fn rename(input: RenameTodo) -> TodoView fails InvalidInput | TodoNotFound use TodoStore {
+fn rename(input: RenameTodo) -> TodoView fails InvalidInput | HttpError use TodoStore {
   title = Quince.field("title", fn() { Todo.title(input.body.title) })
-  view(Todos.rename(id(input.id), title))
+  view(Todos.rename(id(input.id), title)) escape {
+    TodoNotFound(..) -> fail not_found()
+  }
 }
 
-fn complete(input: TodoPath) -> TodoView fails InvalidInput | TodoNotFound use TodoStore {
-  view(Todos.complete(id(input.id)))
+fn complete(input: TodoPath) -> TodoView fails InvalidInput | HttpError use TodoStore {
+  view(Todos.complete(id(input.id))) escape {
+    TodoNotFound(..) -> fail not_found()
+  }
 }
 
-fn remove(input: TodoPath) -> () fails InvalidInput | TodoNotFound use TodoStore {
-  Todos.remove(id(input.id))
+fn remove(input: TodoPath) -> () fails InvalidInput | HttpError use TodoStore {
+  Todos.remove(id(input.id)) escape {
+    TodoNotFound(..) -> fail not_found()
+  }
+}
+
+fn not_found() -> HttpError {
+  HttpError(status: 404, title: "todo not found")
 }
 
 fn id(text: String) -> Todo.TodoId fails InvalidInput {
