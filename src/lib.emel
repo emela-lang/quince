@@ -5,21 +5,27 @@
 # ```emela
 # type TodoPath(id: String)
 #
-# fn api() -> Api[TodoNotFound, { TodoStore }] {
+# fn show(input: TodoPath) -> TodoView fails HttpError use TodoStore {
+#   view(Todos.get(input.id)) escape {
+#     TodoNotFound(..) -> fail HttpError(status: 404, title: "todo not found")
+#   }
+# }
+#
+# fn api() -> Api[TodoStore] {
 #   Quince.new() |> Quince.get("/todos/:id", show) |> Quince.post("/todos", create)
 # }
 #
 # @entry(Http.serve)
 # pub fn app(request: Request) -> Response {
-#   with MemoryTodos { Quince.handle(api(), request, on_error) }
+#   with MemoryTodos { Quince.handle(api(), request) }
 # }
 # ```
 #
 # - The input type is a record. A field named like a parameter of the pattern (`:id`) is read
 #   from the path, a field named `body` from the JSON body, and every other field from the query.
 #   Input that cannot be read is answered with 400 (`InvalidInput`), listing every field at fault
-# - The errors of the handlers (E) go to `on_error`, which turns them into responses with
-#   `escape`, so that none is left out
+# - A handler fails with HttpError to answer with a problem response. The controller turns the
+#   errors of the domain into HttpError with `escape`, so that none is left out
 # - A path that no route matches is answered with 404, and a method that no route of the path
 #   takes with 405 and `allow`. HEAD runs the GET route without its body, and OPTIONS is answered
 #   with 204 and `allow`
@@ -33,38 +39,39 @@ import Json.{SyntaxError}
 import Pattern.{Pattern}
 import Input
 
-## Input that cannot be read, by field. `handle` answers it with 400 and the problems, without
-## calling `on_error`.
+## Input that cannot be read, by field. `handle` answers it with 400 and the problems.
 pub error InvalidInput(problems: List[Problem])
+
+## A failure of a handler, answered with a problem response (RFC 9457) of `status` and `title`.
+pub error HttpError(status: Int, title: String)
 
 ## What is wrong with one field. `field` is the path to it: `title`, `body.title`, `tags[1]`.
 pub type Problem(field: String, message: String) derive Eq, Show
 
-type Route[E, R](
+type Route[R](
   method: Method,
   pattern: Pattern,
   input: Shape,
-  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | E use R,
+  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | HttpError use R,
 )
 
-## The routes of an API, in the order they were added. E is what the handlers fail with, besides
-## InvalidInput, and R the effects they use.
-pub opaque type Api[E, R](routes: List[Route[E, R]])
+## The routes of an API, in the order they were added. R is the effects the handlers use.
+pub opaque type Api[R](routes: List[Route[R]])
 
 ## An API with no routes.
-pub fn new[E, R]() -> Api[E, R] {
+pub fn new[R]() -> Api[R] {
   Api(routes: [])
 }
 
 ## Adds a route that answers `status` with the output of `f` as JSON. When two routes match
 ## a request, the one added first is taken.
-pub fn route[I: Decode + Shaped, O: Encode, E, R](
-  api: Api[E, R],
+pub fn route[I: Decode + Shaped, O: Encode, R](
+  api: Api[R],
   method: Method,
   pattern: String,
   status: Int,
-  f: fn(I) -> O fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> O fails InvalidInput | HttpError use R,
+) -> Api[R] {
   shape = Shape.of_parameter(f)
   run = fn(request: Request, params: List[(String, String)]) {
     input: I = read(shape, request, params)
@@ -74,12 +81,12 @@ pub fn route[I: Decode + Shaped, O: Encode, E, R](
 }
 
 ## Adds a route whose handler returns nothing, answered with 204 and no body.
-pub fn route_empty[I: Decode + Shaped, E, R](
-  api: Api[E, R],
+pub fn route_empty[I: Decode + Shaped, R](
+  api: Api[R],
   method: Method,
   pattern: String,
-  f: fn(I) -> () fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> () fails InvalidInput | HttpError use R,
+) -> Api[R] {
   shape = Shape.of_parameter(f)
   run = fn(request: Request, params: List[(String, String)]) {
     input: I = read(shape, request, params)
@@ -90,57 +97,52 @@ pub fn route_empty[I: Decode + Shaped, E, R](
 }
 
 ## `route` with GET, answered with 200.
-pub fn get[I: Decode + Shaped, O: Encode, E, R](
-  api: Api[E, R],
+pub fn get[I: Decode + Shaped, O: Encode, R](
+  api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> O fails InvalidInput | HttpError use R,
+) -> Api[R] {
   route(api, Get, pattern, 200, f)
 }
 
 ## `route` with POST, answered with 200. Use `route` for 201.
-pub fn post[I: Decode + Shaped, O: Encode, E, R](
-  api: Api[E, R],
+pub fn post[I: Decode + Shaped, O: Encode, R](
+  api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> O fails InvalidInput | HttpError use R,
+) -> Api[R] {
   route(api, Post, pattern, 200, f)
 }
 
 ## `route` with PUT, answered with 200.
-pub fn put[I: Decode + Shaped, O: Encode, E, R](
-  api: Api[E, R],
+pub fn put[I: Decode + Shaped, O: Encode, R](
+  api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> O fails InvalidInput | HttpError use R,
+) -> Api[R] {
   route(api, Put, pattern, 200, f)
 }
 
 ## `route` with PATCH, answered with 200.
-pub fn patch[I: Decode + Shaped, O: Encode, E, R](
-  api: Api[E, R],
+pub fn patch[I: Decode + Shaped, O: Encode, R](
+  api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> O fails InvalidInput | HttpError use R,
+) -> Api[R] {
   route(api, Patch, pattern, 200, f)
 }
 
 ## `route_empty` with DELETE, answered with 204.
-pub fn delete[I: Decode + Shaped, E, R](
-  api: Api[E, R],
+pub fn delete[I: Decode + Shaped, R](
+  api: Api[R],
   pattern: String,
-  f: fn(I) -> () fails InvalidInput | E use R,
-) -> Api[E, R] {
+  f: fn(I) -> () fails InvalidInput | HttpError use R,
+) -> Api[R] {
   route_empty(api, Delete, pattern, f)
 }
 
-## The response to `request`. The errors of the handlers are handed to `on_error`, which
-## answers them; InvalidInput never reaches it.
-pub fn handle[E, R](
-  api: Api[E, R],
-  request: Request,
-  on_error: fn(fn() -> Response fails E use R) -> Response use R,
-) -> Response use R {
+## The response to `request`. InvalidInput is answered with 400 and HttpError with its status.
+pub fn handle[R](api: Api[R], request: Request) -> Response use R {
   segments = request.segments()
   found = api.routes.filter_map(fn(r) {
     r.pattern.matches(segments).map(fn(params) { (r, params) })
@@ -156,12 +158,11 @@ pub fn handle[E, R](
   } else {
     (chosen, method) match {
       (Some((r, params)), _) -> {
-        response = on_error(fn() {
-          run = r.run
-          run(request, params) escape {
-            InvalidInput(problems:) -> invalid(problems)
-          }
-        })
+        run = r.run
+        response = run(request, params) escape {
+          InvalidInput(problems:)    -> invalid(problems)
+          HttpError(status:, title:) -> problem(status, title)
+        }
         if method == Head { Response(body: "", ..response) } else { response }
       }
       (None, Options) -> Response.new(204, "").add_header("allow", allow(found))
@@ -173,7 +174,7 @@ pub fn handle[E, R](
 ## What is wrong with the routes of `api`, one line each: a parameter of a pattern that the input
 ## type has no field for, or an input type that is not a record. Call it from a test, as the
 ## routes are built again for each request.
-pub fn check[E, R](api: Api[E, R]) -> List[String] {
+pub fn check[R](api: Api[R]) -> List[String] {
   api.routes.flat_map(fn(r) {
     label = "#{method_name(r.method)} #{r.pattern.text}"
     if r.input.field_names().is_empty() && !r.pattern.names().is_empty() {
@@ -188,7 +189,7 @@ pub fn check[E, R](api: Api[E, R]) -> List[String] {
 
 ## Reads the field `name` of the input into a value of the domain with `read`. A broken rule
 ## (`Broken`, `AllBroken`) or a failed parse (`ParseError`) becomes InvalidInput for that field;
-## any other error passes through to `on_error`.
+## any other error passes through.
 pub fn field[A, E](name: String, read: fn() -> A fails Broken | AllBroken | ParseError | E) -> A
   fails InvalidInput | E {
   read() escape {
@@ -228,13 +229,13 @@ fn problem_with(status: Int, title: String, extra: List[(String, Dynamic)]) -> R
   )
 }
 
-fn add[E, R](
-  api: Api[E, R],
+fn add[R](
+  api: Api[R],
   method: Method,
   pattern: String,
   input: Shape,
-  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | E use R,
-) -> Api[E, R] {
+  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | HttpError use R,
+) -> Api[R] {
   route = Route(method:, pattern: Pattern.parse(pattern), input:, run:)
   Api(routes: api.routes.append([route]))
 }
@@ -271,7 +272,7 @@ fn problem_of(e: DecodeError) -> Problem {
 }
 
 ## The methods that the routes in `found` take, for `allow`: HEAD with GET, and OPTIONS.
-fn allow[E, R](found: List[(Route[E, R], List[(String, String)])]) -> String {
+fn allow[R](found: List[(Route[R], List[(String, String)])]) -> String {
   methods = found.map(fn((r, _)) { r.method })
   with_head = if methods.any(fn(m) { m == Get }) { methods.append([Head]) } else { methods }
   with_head.append([Options]).fold(from: [], f: fn(acc, m) {
