@@ -4,7 +4,7 @@ version = "0.1.0"
 emela = "0.27.0"
 
 [dependencies]
-"github.com/emela-lang/quince" = "v0.5.0"
+"github.com/emela-lang/quince" = "v0.6.0"
 "github.com/emela-lang/x/dynamic" = "v0.5.1"
 "github.com/emela-lang/x/shape" = "v0.4.0"
 
