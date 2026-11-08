@@ -5,7 +5,7 @@
 # ```emela
 # type TodoPath(id: String)
 #
-# fn show(input: TodoPath) -> TodoView fails HttpError use TodoStore {
+# fn show(input: TodoPath) -> TodoView fails HttpError uses { TodoStore } {
 #   view(Todos.get(input.id)) escape {
 #     TodoNotFound(..) -> fail HttpError(status: 404, title: "todo not found")
 #   }
@@ -52,7 +52,7 @@ type Route[R](
   method: Method,
   pattern: Pattern,
   input: Shape,
-  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | HttpError use R,
+  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | HttpError uses { R },
 )
 
 ## The routes of an API, in the order they were added. R is the effects the handlers use.
@@ -70,10 +70,10 @@ pub fn route[I: Decode + Shaped, O: Encode, R](
   method: Method,
   pattern: String,
   status: Int,
-  f: fn(I) -> O fails InvalidInput | HttpError use R,
+  f: fn(I) -> O fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   shape = Shape.of_parameter(f)
-  run = fn(request: Request, params: List[(String, String)]) {
+  run = |request: Request, params: List[(String, String)]| {
     input: I = read(shape, request, params)
     json(status, f(input))
   }
@@ -85,10 +85,10 @@ pub fn route_empty[I: Decode + Shaped, R](
   api: Api[R],
   method: Method,
   pattern: String,
-  f: fn(I) -> () fails InvalidInput | HttpError use R,
+  f: fn(I) -> () fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   shape = Shape.of_parameter(f)
-  run = fn(request: Request, params: List[(String, String)]) {
+  run = |request: Request, params: List[(String, String)]| {
     input: I = read(shape, request, params)
     f(input)
     Response.new(204, "")
@@ -100,7 +100,7 @@ pub fn route_empty[I: Decode + Shaped, R](
 pub fn get[I: Decode + Shaped, O: Encode, R](
   api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | HttpError use R,
+  f: fn(I) -> O fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   route(api, Get, pattern, 200, f)
 }
@@ -109,7 +109,7 @@ pub fn get[I: Decode + Shaped, O: Encode, R](
 pub fn post[I: Decode + Shaped, O: Encode, R](
   api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | HttpError use R,
+  f: fn(I) -> O fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   route(api, Post, pattern, 200, f)
 }
@@ -118,7 +118,7 @@ pub fn post[I: Decode + Shaped, O: Encode, R](
 pub fn put[I: Decode + Shaped, O: Encode, R](
   api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | HttpError use R,
+  f: fn(I) -> O fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   route(api, Put, pattern, 200, f)
 }
@@ -127,7 +127,7 @@ pub fn put[I: Decode + Shaped, O: Encode, R](
 pub fn patch[I: Decode + Shaped, O: Encode, R](
   api: Api[R],
   pattern: String,
-  f: fn(I) -> O fails InvalidInput | HttpError use R,
+  f: fn(I) -> O fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   route(api, Patch, pattern, 200, f)
 }
@@ -136,21 +136,21 @@ pub fn patch[I: Decode + Shaped, O: Encode, R](
 pub fn delete[I: Decode + Shaped, R](
   api: Api[R],
   pattern: String,
-  f: fn(I) -> () fails InvalidInput | HttpError use R,
+  f: fn(I) -> () fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   route_empty(api, Delete, pattern, f)
 }
 
 ## The response to `request`. InvalidInput is answered with 400 and HttpError with its status.
-pub fn handle[R](api: Api[R], request: Request) -> Response use R {
+pub fn handle[R](api: Api[R], request: Request) -> Response uses { R } {
   segments = request.segments()
-  found = api.routes.filter_map(fn(r) {
-    r.pattern.matches(segments).map(fn(params) { (r, params) })
+  found = api.routes.filter_map(|r| {
+    r.pattern.matches(segments).map(|params| (r, params))
   })
   method = request.method
-  exact = found.find(fn((r, _)) { r.method == method })
+  exact = found.find(|(r, _)| r.method == method)
   chosen = (exact, method) match {
-    (None, Head) -> found.find(fn((r, _)) { r.method == Get })
+    (None, Head) -> found.find(|(r, _)| r.method == Get)
     _            -> exact
   }
   if found.is_empty() {
@@ -175,12 +175,12 @@ pub fn handle[R](api: Api[R], request: Request) -> Response use R {
 ## type has no field for, or an input type that is not a record. Call it from a test, as the
 ## routes are built again for each request.
 pub fn check[R](api: Api[R]) -> List[String] {
-  api.routes.flat_map(fn(r) {
+  api.routes.flat_map(|r| {
     label = "#{method_name(r.method)} #{r.pattern.text}"
     if r.input.field_names().is_empty() && !r.pattern.names().is_empty() {
       ["#{label}: the input `#{r.input.name_of()}` is not a record with fields"]
     } else {
-      r.pattern.names().filter(fn(name) { !Input.has_field(r.input, name) }).map(fn(name) {
+      r.pattern.names().filter(|name| !Input.has_field(r.input, name)).map(|name| {
         "#{label}: the input `#{r.input.name_of()}` has no field `#{name}`"
       })
     }
@@ -195,7 +195,7 @@ pub fn field[A, E](name: String, read: fn() -> A fails Broken | AllBroken | Pars
   read() escape {
     Broken(message:) -> fail InvalidInput(problems: [Problem(field: name, message:)])
     AllBroken(messages:) -> fail InvalidInput(
-      problems: messages.map(fn(message) { Problem(field: name, message:) }),
+      problems: messages.map(|message| Problem(field: name, message:)),
     )
     ParseError(input:) -> fail InvalidInput(
       problems: [Problem(field: name, message: "cannot be read: `#{input}`")],
@@ -215,7 +215,7 @@ pub fn problem(status: Int, title: String) -> Response {
 
 ## The 400 response for `problems`: a problem response with the problems under `errors`.
 pub fn invalid(problems: List[Problem]) -> Response {
-  errors = problems.map(fn(p) {
+  errors = problems.map(|p| {
     Dynamic.object([("field", Dynamic.Text(p.field)), ("message", Dynamic.Text(p.message))])
   })
   problem_with(400, "Bad Request", [("errors", Dynamic.Items(errors))])
@@ -234,7 +234,7 @@ fn add[R](
   method: Method,
   pattern: String,
   input: Shape,
-  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | HttpError use R,
+  run: fn(Request, List[(String, String)]) -> Response fails InvalidInput | HttpError uses { R },
 ) -> Api[R] {
   route = Route(method:, pattern: Pattern.parse(pattern), input:, run:)
   Api(routes: api.routes.append([route]))
@@ -261,7 +261,7 @@ fn read[I: Decode](shape: Shape, request: Request, params: List[(String, String)
 }
 
 fn problem_of(e: DecodeError) -> Problem {
-  field = e.path.fold(from: "", f: fn(acc, segment) {
+  field = e.path.fold(from: "", f: |acc, segment| {
     (acc, segment) match {
       ("", Key(key)) -> key
       (_, Key(key))  -> "#{acc}.#{key}"
@@ -273,10 +273,10 @@ fn problem_of(e: DecodeError) -> Problem {
 
 ## The methods that the routes in `found` take, for `allow`: HEAD with GET, and OPTIONS.
 fn allow[R](found: List[(Route[R], List[(String, String)])]) -> String {
-  methods = found.map(fn((r, _)) { r.method })
-  with_head = if methods.any(fn(m) { m == Get }) { methods.append([Head]) } else { methods }
-  with_head.append([Options]).fold(from: [], f: fn(acc, m) {
-    if acc.any(fn(n) { n == m }) { acc } else { acc.append([m]) }
+  methods = found.map(|(r, _)| r.method)
+  with_head = if methods.any(|m| m == Get) { methods.append([Head]) } else { methods }
+  with_head.append([Options]).fold(from: [], f: |acc, m| {
+    if acc.any(|n| n == m) { acc } else { acc.append([m]) }
   }).map(method_name).join(", ")
 }
 

@@ -93,8 +93,8 @@ impl ItemBody: Decode {
   }
 
   fn from_dynamic_all(d) {
-    name = Dynamic.attempt(fn() { d.field_all("name", Decode.from_dynamic_all) })
-    count = Dynamic.attempt(fn() { d.field_all("count", Decode.from_dynamic_all) })
+    name = Dynamic.attempt(|| d.field_all("name", Decode.from_dynamic_all))
+    count = Dynamic.attempt(|| d.field_all("count", Decode.from_dynamic_all))
     (name, count) match {
       (Dynamic.Decoded(name), Dynamic.Decoded(count)) -> ItemBody(name:, count:)
       _ -> fail Dynamic.DecodeErrors(errors: name.errors_of().append(count.errors_of()))
@@ -145,7 +145,7 @@ fn search(input: Search) -> Found {
 }
 
 fn create(input: NewItem) -> Item fails InvalidInput {
-  name = Lib.field("name", fn() { Rule.check(input.body.name, [Rule.min_length(1)]) })
+  name = Lib.field("name", || Rule.check(input.body.name, [Rule.min_length(1)]))
   Item(id: input.body.count, name:)
 }
 

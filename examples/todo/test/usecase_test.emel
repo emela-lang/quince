@@ -16,7 +16,7 @@ fn title(s: String) -> Todo.Title {
 
 @test
 fn a_completed_todo_is_done() {
-  (todo, _) = State.run(Memory.empty(), fn() {
+  (todo, _) = State.run(Memory.empty(), || {
     with MemoryTodos { Todos.complete(Todos.create(title("write")).id) }
   })
   assert todo.done
@@ -24,20 +24,20 @@ fn a_completed_todo_is_done() {
 
 @test
 fn the_list_is_filtered_by_done() {
-  (open, _) = State.run(Memory.empty(), fn() {
+  (open, _) = State.run(Memory.empty(), || {
     with MemoryTodos {
       Todos.create(title("a"))
       Todos.complete(Todos.create(title("b")).id)
       Todos.list(Some(False))
     }
   })
-  assert open.map(fn(t) { Todo.title_text(t.title) }) == ["a"]
+  assert open.map(|t| Todo.title_text(t.title)) == ["a"]
 }
 
 @test
 fn a_missing_todo_is_not_found() {
   found = {
-    State.run(Memory.empty(), fn() { with MemoryTodos { Todos.get(Todo.numbered(9)) } })
+    State.run(Memory.empty(), || with MemoryTodos { Todos.get(Todo.numbered(9)) })
     False
   } escape {
     TodoNotFound(id: _) -> True

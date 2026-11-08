@@ -9,12 +9,12 @@ import Web.Todos
 import Quince
 import Main
 
-fn send(method: Request.Method, url: String, body: String) -> Response use State[Memory] {
+fn send(method: Request.Method, url: String, body: String) -> Response uses { State[Memory] } {
   request = Request(body:, ..Request.new(method, "http://localhost#{url}"))
   with MemoryTodos { Quince.handle(Todos.api(), request) }
 }
 
-fn run[A](body: fn() -> A use State[Memory]) -> A {
+fn run[A](body: fn() -> A uses { State[Memory] }) -> A {
   (result, _) = State.run(Memory.empty(), body)
   result
 }
@@ -26,15 +26,15 @@ fn the_routes_are_well_formed() {
 
 @test
 fn a_todo_is_created_renamed_and_completed() {
-  responses = run(fn() {
+  responses = run(|| {
     created = send(Post, "/todos", "{\"title\":\"write\"}")
     renamed = send(Patch, "/todos/1", "{\"title\":\"write more\"}")
     done = send(Post, "/todos/1/complete", "")
     listed = send(Get, "/todos?done=true", "")
     [created, renamed, done, listed]
   })
-  assert responses.map(fn(r) { r.status }) == [201, 200, 200, 200]
-  assert responses.map(fn(r) { r.body })
+  assert responses.map(|r| r.status) == [201, 200, 200, 200]
+  assert responses.map(|r| r.body)
     == [
       "{\"done\":false,\"id\":\"1\",\"title\":\"write\"}",
       "{\"done\":false,\"id\":\"1\",\"title\":\"write more\"}",
@@ -45,7 +45,7 @@ fn a_todo_is_created_renamed_and_completed() {
 
 @test
 fn an_empty_title_is_400_at_title() {
-  res = run(fn() { send(Post, "/todos", "{\"title\":\"  \"}") })
+  res = run(|| send(Post, "/todos", "{\"title\":\"  \"}"))
   assert res.status == 400
   assert res.body
     == "{\"errors\":[{\"field\":\"title\",\"message\":\"at least 1 characters\"}],\"status\":400,\"title\":\"Bad Request\"}"
@@ -53,14 +53,14 @@ fn an_empty_title_is_400_at_title() {
 
 @test
 fn a_body_of_the_wrong_shape_is_400_at_the_field() {
-  res = run(fn() { send(Post, "/todos", "{\"title\":3}") })
+  res = run(|| send(Post, "/todos", "{\"title\":3}"))
   assert res.status == 400
   assert res.body.contains("\"field\":\"body.title\"")
 }
 
 @test
 fn a_missing_todo_is_404() {
-  statuses = run(fn() {
+  statuses = run(|| {
     [send(Get, "/todos/9", "").status, send(Delete, "/todos/9", "").status]
   })
   assert statuses == [404, 404]
@@ -68,7 +68,7 @@ fn a_missing_todo_is_404() {
 
 @test
 fn a_deleted_todo_is_gone() {
-  statuses = run(fn() {
+  statuses = run(|| {
     send(Post, "/todos", "{\"title\":\"a\"}")
     [send(Delete, "/todos/1", "").status, send(Get, "/todos/1", "").status]
   })
