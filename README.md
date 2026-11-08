@@ -19,7 +19,7 @@ fn api() -> Api[TodoStore] {
     |> Quince.route(Post, "/todos", 201, create)
 }
 
-fn show(input: TodoPath) -> TodoView fails HttpError use TodoStore {
+fn show(input: TodoPath) -> TodoView fails HttpError uses { TodoStore } {
   view(Todos.get(input.id)) escape {
     TodoNotFound(..) -> fail HttpError(status: 404, title: "todo not found")
   }
@@ -60,8 +60,8 @@ pub fn app(request: Request) -> Response {
 handler の中で domain の値に直すときは `Quince.field` を使う．`Broken`，`AllBroken`（x/shape の `Rule`）と `ParseError` を，そのフィールドの 400 にする．それ以外の error はそのまま呼び出し側に通す．
 
 ```emela
-fn create(input: CreateTodo) -> TodoView fails InvalidInput use TodoStore {
-  title = Quince.field("title", fn() { Todo.title(input.body.title) })
+fn create(input: CreateTodo) -> TodoView fails InvalidInput uses { TodoStore } {
+  title = Quince.field("title", || Todo.title(input.body.title))
   view(Todos.create(title))
 }
 ```
@@ -73,7 +73,7 @@ handler が失敗してよい error は `InvalidInput` と `HttpError` の 2 つ
 domain の error は controller（handler）の中で `escape` を使って `HttpError` に直す．handler の型に `fails InvalidInput | HttpError` と書くので，use case に error が増えたのに対応を書き忘れると，その handler で compiler が見つける．error の少ない handler も，effect を使わない handler も，同じ `Api` に登録できる．
 
 ```emela
-fn complete(input: TodoPath) -> TodoView fails InvalidInput | HttpError use TodoStore {
+fn complete(input: TodoPath) -> TodoView fails InvalidInput | HttpError uses { TodoStore } {
   view(Todos.complete(id(input.id))) escape {
     TodoNotFound(..) -> fail not_found()
   }

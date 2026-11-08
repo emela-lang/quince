@@ -15,7 +15,7 @@ import Quince
 ## an adapter of a database or a key-value store here instead.
 @entry(Http.serve)
 pub fn app(request: Request) -> Response {
-  (response, _) = State.run(Memory.empty(), fn() {
+  (response, _) = State.run(Memory.empty(), || {
     with MemoryTodos { Quince.handle(Todos.api(), request) }
   })
   response

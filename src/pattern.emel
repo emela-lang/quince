@@ -10,7 +10,7 @@ pub type Pattern(text: String, parts: List[Part]) derive Eq
 
 ## The pattern of `text`. Empty segments are dropped, so `/todos/` is `/todos`.
 pub fn parse(text: String) -> Pattern {
-  parts = text.split("/").filter(fn(s) { s != "" }).map(fn(s) {
+  parts = text.split("/").filter(|s| s != "").map(|s| {
     if s.starts_with(":") {
       Param(s.chars().drop(1).join(""))
     } else {
@@ -22,7 +22,7 @@ pub fn parse(text: String) -> Pattern {
 
 ## The names of the parameters, in order.
 pub fn names(pattern: Pattern) -> List[String] {
-  pattern.parts.filter_map(fn(part) {
+  pattern.parts.filter_map(|part| {
     part match {
       Param(name) -> Some(name)
       Literal(_)  -> None
@@ -36,7 +36,7 @@ pub fn matches(pattern: Pattern, segments: List[String]) -> Option[List[(String,
   if pattern.parts.length() != segments.length() {
     None
   } else {
-    pattern.parts.zip(segments).fold(from: Some([]), f: fn(acc, (part, segment)) {
+    pattern.parts.zip(segments).fold(from: Some([]), f: |acc, (part, segment)| {
       (acc, part) match {
         (None, _)                       -> None
         (Some(found), Param(name))      -> Some(found.append([(name, segment)]))

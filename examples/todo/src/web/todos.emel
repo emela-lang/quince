@@ -31,35 +31,35 @@ pub fn api() -> Api[TodoStore] {
     |> Quince.delete("/todos/:id", remove)
 }
 
-fn list(input: ListQuery) -> List[TodoView] use TodoStore {
+fn list(input: ListQuery) -> List[TodoView] uses { TodoStore } {
   Todos.list(input.done).map(view)
 }
 
-fn create(input: CreateTodo) -> TodoView fails InvalidInput use TodoStore {
-  title = Quince.field("title", fn() { Todo.title(input.body.title) })
+fn create(input: CreateTodo) -> TodoView fails InvalidInput uses { TodoStore } {
+  title = Quince.field("title", || Todo.title(input.body.title))
   view(Todos.create(title))
 }
 
-fn show(input: TodoPath) -> TodoView fails InvalidInput | HttpError use TodoStore {
+fn show(input: TodoPath) -> TodoView fails InvalidInput | HttpError uses { TodoStore } {
   view(Todos.get(id(input.id))) escape {
     TodoNotFound(..) -> fail not_found()
   }
 }
 
-fn rename(input: RenameTodo) -> TodoView fails InvalidInput | HttpError use TodoStore {
-  title = Quince.field("title", fn() { Todo.title(input.body.title) })
+fn rename(input: RenameTodo) -> TodoView fails InvalidInput | HttpError uses { TodoStore } {
+  title = Quince.field("title", || Todo.title(input.body.title))
   view(Todos.rename(id(input.id), title)) escape {
     TodoNotFound(..) -> fail not_found()
   }
 }
 
-fn complete(input: TodoPath) -> TodoView fails InvalidInput | HttpError use TodoStore {
+fn complete(input: TodoPath) -> TodoView fails InvalidInput | HttpError uses { TodoStore } {
   view(Todos.complete(id(input.id))) escape {
     TodoNotFound(..) -> fail not_found()
   }
 }
 
-fn remove(input: TodoPath) -> () fails InvalidInput | HttpError use TodoStore {
+fn remove(input: TodoPath) -> () fails InvalidInput | HttpError uses { TodoStore } {
   Todos.remove(id(input.id)) escape {
     TodoNotFound(..) -> fail not_found()
   }
@@ -70,7 +70,7 @@ fn not_found() -> HttpError {
 }
 
 fn id(text: String) -> Todo.TodoId fails InvalidInput {
-  Quince.field("id", fn() { Todo.todo_id(text) })
+  Quince.field("id", || Todo.todo_id(text))
 }
 
 fn view(todo: Todo) -> TodoView {
@@ -148,8 +148,8 @@ impl RenameTodo: Decode {
   }
 
   fn from_dynamic_all(d) {
-    id = Dynamic.attempt(fn() { d.field_all("id", Decode.from_dynamic_all) })
-    body = Dynamic.attempt(fn() { d.field_all("body", Decode.from_dynamic_all) })
+    id = Dynamic.attempt(|| d.field_all("id", Decode.from_dynamic_all))
+    body = Dynamic.attempt(|| d.field_all("body", Decode.from_dynamic_all))
     (id, body) match {
       (Decoded(id), Decoded(body)) -> RenameTodo(id:, body:)
       _ -> fail DecodeErrors(errors: id.errors_of().append(body.errors_of()))
