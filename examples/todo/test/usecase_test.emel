@@ -6,7 +6,7 @@ import Domain.Todo
 import Store.Memory.{MemoryTodos}
 import Store.Memory
 import Usecase.Todos
-import Shape.Rule.{Broken}
+import Rule.{Broken}
 
 fn title(s: String) -> Todo.Title {
   Todo.title(s) escape {

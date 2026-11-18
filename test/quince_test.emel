@@ -3,8 +3,8 @@ import Std.Http.Response.{Response}
 import Std.State.{State}
 import Std.Dynamic.{Decode, Encode}
 import Std.Shape.{Shaped}
-import Shape.Rule.{Broken}
-import Shape.Rule
+import Rule.{Broken}
+import Rule
 import Lib.{Api, InvalidInput, HttpError, Problem}
 
 # The inputs and outputs.

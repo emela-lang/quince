@@ -5,7 +5,7 @@ emela = "0.28.0"
 
 [dependencies]
 "github.com/emela-lang/quince" = "v0.7.0"
-"github.com/emela-lang/x/shape" = "v0.5.0"
+"github.com/emela-lang/x/rule" = "v0.1.0"
 
 [replace]
 "github.com/emela-lang/quince" = { path = "../.." }

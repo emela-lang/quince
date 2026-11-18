@@ -59,7 +59,7 @@ pub fn app(request: Request) -> Response {
 - `field` はフィールドへの道で，`title`，`body.title`，`tags[1]` の形
 - 本文が JSON でなければ，`field` は `body`
 
-handler の中で domain の値に直すときは `Quince.field` を使う．`Broken`，`AllBroken`（x/shape の `Rule`）と `ParseError` を，そのフィールドの 400 にする．それ以外の error はそのまま呼び出し側に通す．
+handler の中で domain の値に直すときは `Quince.field` を使う．`Broken`，`AllBroken`（x/rule）と `ParseError` を，そのフィールドの 400 にする．それ以外の error はそのまま呼び出し側に通す．
 
 ```emela
 fn create(input: CreateTodo) -> TodoView fails InvalidInput uses { TodoStore } {

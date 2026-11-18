@@ -34,7 +34,7 @@ import Std.Http.Request.{Request, Method, Get, Head, Post, Put, Patch, Delete, O
 import Std.Http.Response.{Response}
 import Std.Dynamic.{Dynamic, Decode, Encode, DecodeError, DecodeErrors, Key, Index}
 import Std.Shape.{Shape, Shaped}
-import Shape.Rule.{Broken, AllBroken}
+import Rule.{Broken, AllBroken}
 import Std.Json.{SyntaxError}
 import Pattern.{Pattern}
 import Input
