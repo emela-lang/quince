@@ -3,15 +3,17 @@
 Emela の HTTP API を，route の list として書く．route は method，パスの pattern，handler の 3 つで，handler は入力の型を 1 つ受け取り，出力の型を 1 つ返す．quince は request から入力を読み，handler を呼び，出力を JSON で返す．
 
 ```emela
+import Std.Dynamic.{Decode, Encode}
 import Std.Http
 import Std.Http.Request.{Request, Post}
 import Std.Http.Response.{Response}
+import Std.Shape.{Shaped}
 import Quince.{Api, InvalidInput, HttpError}
 
-type TodoPath(id: String)
-type CreateTodo(body: TodoBody)
-type TodoBody(title: String)
-type TodoView(id: String, title: String, done: Bool)
+type TodoPath(id: String) derive Decode, Shaped
+type CreateTodo(body: TodoBody) derive Decode, Shaped
+type TodoBody(title: String) derive Decode, Shaped
+type TodoView(id: String, title: String, done: Bool) derive Encode
 
 fn api() -> Api[TodoStore] {
   Quince.new()
@@ -43,7 +45,7 @@ pub fn app(request: Request) -> Response {
 
 パスと query の値は文字列で来る．quince は入力の型の Shape を見て，Int，Int64，Float のフィールドは数に，Bool のフィールドは `true` と `false` を Bool に直してから `Decode` に渡す．直せない値は文字列のまま渡すので，`Decode` がそのフィールドで失敗する．
 
-入力の型には `Decode` と `Shaped` を，出力の型には `Encode` を要求する．
+入力の型には `Decode` と `Shaped`（`Std.Dynamic`，`Std.Shape`）を，出力の型には `Encode` を要求する．どれも型の宣言に `derive Decode, Shaped`，`derive Encode` と書けば作られる．
 
 ## 400
 
@@ -109,6 +111,5 @@ fn the_routes_are_well_formed() {
 
 ## まだないもの
 
-- `derive Decode, Shaped`．compiler が導出できるのは Eq，Ord，Show だけなので，入力と出力の型の impl は今は手で書く（`examples/todo/src/web/todos.emel`）．std に移す proposal（emela-lang/emela#455）が入れば，型の宣言に `derive` を書くだけになる
 - OpenAPI の生成．route は入力の型の Shape を持っているので，その上に作れる．出力の型にも `Shaped` を要求することになる
 - 認証の結果のような，request ごとの値の受け渡し．今は effect と handler で書く
