@@ -2,8 +2,8 @@
 # into domain values and back. Only this module knows the paths and the JSON.
 
 import Std.Http.Request.{Post}
-import Dynamic.{Dynamic, Decode, Encode, Decoded, DecodeErrors}
-import Shape.{Shaped, Field, Record}
+import Std.Dynamic.{Dynamic, Decode, Encode, Decoded, DecodeErrors}
+import Std.Shape.{Shaped, Field, Record}
 import Quince.{Api, InvalidInput, HttpError}
 import Domain.Todo.{Todo, TodoStore, TodoNotFound}
 import Domain.Todo

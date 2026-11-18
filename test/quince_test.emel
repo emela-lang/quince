@@ -1,8 +1,8 @@
 import Std.Http.Request.{Request, Get, Head, Post, Put, Delete, Options}
 import Std.Http.Response.{Response}
 import Std.State.{State}
-import Dynamic.{Dynamic, Decode, Encode, Text}
-import Shape.{Shape, Shaped, Field, Record}
+import Std.Dynamic.{Dynamic, Decode, Encode, Text}
+import Std.Shape.{Shape, Shaped, Field, Record}
 import Shape.Rule.{Broken}
 import Shape.Rule
 import Lib.{Api, InvalidInput, HttpError, Problem}
