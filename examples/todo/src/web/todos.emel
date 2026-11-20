@@ -2,24 +2,24 @@
 # into domain values and back. Only this module knows the paths and the JSON.
 
 import Std.Http.Request.{Post}
-import Dynamic.{Dynamic, Decode, Encode, Decoded, DecodeErrors}
-import Shape.{Shaped, Field, Record}
+import Std.Dynamic.{Decode, Encode}
+import Std.Shape.{Shaped}
 import Quince.{Api, InvalidInput, HttpError}
 import Domain.Todo.{Todo, TodoStore, TodoNotFound}
 import Domain.Todo
 import Usecase.Todos
 
-type TodoPath(id: String)
+type TodoPath(id: String) derive Decode, Shaped
 
-type ListQuery(done: Option[Bool])
+type ListQuery(done: Option[Bool]) derive Decode, Shaped
 
-type TodoBody(title: String)
+type TodoBody(title: String) derive Decode, Shaped
 
-type CreateTodo(body: TodoBody)
+type CreateTodo(body: TodoBody) derive Decode, Shaped
 
-type RenameTodo(id: String, body: TodoBody)
+type RenameTodo(id: String, body: TodoBody) derive Decode, Shaped
 
-type TodoView(id: String, title: String, done: Bool)
+type TodoView(id: String, title: String, done: Bool) derive Encode
 
 pub fn api() -> Api[TodoStore] {
   Quince.new()
@@ -75,110 +75,4 @@ fn id(text: String) -> Todo.TodoId fails InvalidInput {
 
 fn view(todo: Todo) -> TodoView {
   TodoView(id: Todo.id_text(todo.id), title: Todo.title_text(todo.title), done: todo.done)
-}
-
-# Hand-written for now: the compiler derives only Eq, Ord and Show. These are the impls that
-# `derive Decode, Shaped` (inputs) and `derive Encode` (outputs) are meant to generate.
-
-impl TodoPath: Decode {
-  fn from_dynamic(d) {
-    TodoPath(id: d.field("id", Decode.from_dynamic))
-  }
-}
-
-impl TodoPath: Shaped {
-  fn shape_in(proxy, visiting) {
-    id: Option[String] = None
-    Record(name: "TodoPath", fields: [Field(name: "id", shape: Shaped.shape_in(id, visiting))])
-  }
-}
-
-impl ListQuery: Decode {
-  fn from_dynamic(d) {
-    ListQuery(done: d.field("done", Decode.from_dynamic))
-  }
-}
-
-impl ListQuery: Shaped {
-  fn shape_in(proxy, visiting) {
-    done: Option[Option[Bool]] = None
-    Record(name: "ListQuery", fields: [Field(name: "done", shape: Shaped.shape_in(done, visiting))])
-  }
-}
-
-impl TodoBody: Decode {
-  fn from_dynamic(d) {
-    TodoBody(title: d.field("title", Decode.from_dynamic))
-  }
-}
-
-impl TodoBody: Shaped {
-  fn shape_in(proxy, visiting) {
-    title: Option[String] = None
-    Record(
-      name: "TodoBody",
-      fields: [Field(name: "title", shape: Shaped.shape_in(title, visiting))],
-    )
-  }
-}
-
-impl CreateTodo: Decode {
-  fn from_dynamic(d) {
-    CreateTodo(body: d.field("body", Decode.from_dynamic))
-  }
-
-  fn from_dynamic_all(d) {
-    CreateTodo(body: d.field_all("body", Decode.from_dynamic_all))
-  }
-}
-
-impl CreateTodo: Shaped {
-  fn shape_in(proxy, visiting) {
-    body: Option[TodoBody] = None
-    Record(
-      name: "CreateTodo",
-      fields: [Field(name: "body", shape: Shaped.shape_in(body, visiting))],
-    )
-  }
-}
-
-impl RenameTodo: Decode {
-  fn from_dynamic(d) {
-    RenameTodo(id: d.field("id", Decode.from_dynamic), body: d.field("body", Decode.from_dynamic))
-  }
-
-  fn from_dynamic_all(d) {
-    id = Dynamic.attempt(|| d.field_all("id", Decode.from_dynamic_all))
-    body = Dynamic.attempt(|| d.field_all("body", Decode.from_dynamic_all))
-    (id, body) match {
-      (Decoded(id), Decoded(body)) -> RenameTodo(id:, body:)
-      _ -> fail DecodeErrors(errors: id.errors_of().append(body.errors_of()))
-    }
-  }
-}
-
-impl RenameTodo: Shaped {
-  fn shape_in(proxy, visiting) {
-    id: Option[String] = None
-    body: Option[TodoBody] = None
-    Record(
-      name: "RenameTodo",
-      fields: [
-        Field(name: "id", shape: Shaped.shape_in(id, visiting)),
-        Field(name: "body", shape: Shaped.shape_in(body, visiting)),
-      ],
-    )
-  }
-}
-
-impl TodoView: Encode {
-  fn to_dynamic(self) {
-    Dynamic.object(
-      [
-        ("id", Encode.to_dynamic(self.id)),
-        ("title", Encode.to_dynamic(self.title)),
-        ("done", Encode.to_dynamic(self.done)),
-      ],
-    )
-  }
 }

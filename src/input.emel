@@ -7,9 +7,9 @@
 # `false`, and Items for a List, from every value of the name in the query. A value that does
 # not turn is left as text, so that `Decode` reports it at the field.
 
-import Dynamic.{Dynamic, Number, Text, Items, Bool}
-import Dynamic.Number
-import Shape.{Shape, Field, Record}
+import Std.Dynamic.{Dynamic, Number, Text, Items, Bool}
+import Std.Dynamic.Number
+import Std.Shape.{Shape, Field, Record}
 
 ## The fields of `shape` (a record) other than `body`, read from `params` and `query`. A List
 ## field missing from both is empty; any other is left out, so that `Decode` reads it as Null.

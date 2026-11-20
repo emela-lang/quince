@@ -3,7 +3,7 @@
 # its output as JSON.
 #
 # ```emela
-# type TodoPath(id: String)
+# type TodoPath(id: String) derive Decode, Shaped
 #
 # fn show(input: TodoPath) -> TodoView fails HttpError uses { TodoStore } {
 #   view(Todos.get(input.id)) escape {
@@ -32,10 +32,10 @@
 
 import Std.Http.Request.{Request, Method, Get, Head, Post, Put, Patch, Delete, Options}
 import Std.Http.Response.{Response}
-import Dynamic.{Dynamic, Decode, Encode, DecodeError, DecodeErrors, Key, Index}
-import Shape.{Shape, Shaped}
-import Shape.Rule.{Broken, AllBroken}
-import Json.{SyntaxError}
+import Std.Dynamic.{Dynamic, Decode, Encode, DecodeError, DecodeErrors, Key, Index}
+import Std.Shape.{Shape, Shaped}
+import Rule.{Broken, AllBroken}
+import Std.Json.{SyntaxError}
 import Pattern.{Pattern}
 import Input
 

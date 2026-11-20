@@ -1,132 +1,27 @@
 import Std.Http.Request.{Request, Get, Head, Post, Put, Delete, Options}
 import Std.Http.Response.{Response}
 import Std.State.{State}
-import Dynamic.{Dynamic, Decode, Encode, Text}
-import Shape.{Shape, Shaped, Field, Record}
-import Shape.Rule.{Broken}
-import Shape.Rule
+import Std.Dynamic.{Decode, Encode}
+import Std.Shape.{Shaped}
+import Rule.{Broken}
+import Rule
 import Lib.{Api, InvalidInput, HttpError, Problem}
 
-# The inputs and outputs, with the impls that `derive Decode, Shaped` and `derive Encode` are
-# meant to generate.
+# The inputs and outputs.
 
-type ItemPath(id: Int)
+type ItemPath(id: Int) derive Decode, Shaped
 
-type Search(q: String, page: Option[Int], tags: List[String])
+type Search(q: String, page: Option[Int], tags: List[String]) derive Decode, Shaped
 
-type NewItem(body: ItemBody)
+type NewItem(body: ItemBody) derive Decode, Shaped
 
-type ItemBody(name: String, count: Int)
+type ItemBody(name: String, count: Int) derive Decode, Shaped
 
-type Item(id: Int, name: String)
+type Item(id: Int, name: String) derive Encode
 
-type Found(names: List[String])
+type Found(names: List[String]) derive Encode
 
 error ItemNotFound(id: Int)
-
-impl ItemPath: Decode {
-  fn from_dynamic(d) {
-    ItemPath(id: d.field("id", Decode.from_dynamic))
-  }
-
-  fn from_dynamic_all(d) {
-    ItemPath(id: d.field_all("id", Decode.from_dynamic_all))
-  }
-}
-
-impl ItemPath: Shaped {
-  fn shape_in(proxy, visiting) {
-    id: Option[Int] = None
-    Record(name: "ItemPath", fields: [Field(name: "id", shape: Shaped.shape_in(id, visiting))])
-  }
-}
-
-impl Search: Decode {
-  fn from_dynamic(d) {
-    Search(
-      q: d.field("q", Decode.from_dynamic),
-      page: d.field("page", Decode.from_dynamic),
-      tags: d.field("tags", Decode.from_dynamic),
-    )
-  }
-}
-
-impl Search: Shaped {
-  fn shape_in(proxy, visiting) {
-    q: Option[String] = None
-    page: Option[Option[Int]] = None
-    tags: Option[List[String]] = None
-    Record(
-      name: "Search",
-      fields: [
-        Field(name: "q", shape: Shaped.shape_in(q, visiting)),
-        Field(name: "page", shape: Shaped.shape_in(page, visiting)),
-        Field(name: "tags", shape: Shaped.shape_in(tags, visiting)),
-      ],
-    )
-  }
-}
-
-impl NewItem: Decode {
-  fn from_dynamic(d) {
-    NewItem(body: d.field("body", Decode.from_dynamic))
-  }
-
-  fn from_dynamic_all(d) {
-    NewItem(body: d.field_all("body", Decode.from_dynamic_all))
-  }
-}
-
-impl NewItem: Shaped {
-  fn shape_in(proxy, visiting) {
-    body: Option[ItemBody] = None
-    Record(name: "NewItem", fields: [Field(name: "body", shape: Shaped.shape_in(body, visiting))])
-  }
-}
-
-impl ItemBody: Decode {
-  fn from_dynamic(d) {
-    ItemBody(
-      name: d.field("name", Decode.from_dynamic),
-      count: d.field("count", Decode.from_dynamic),
-    )
-  }
-
-  fn from_dynamic_all(d) {
-    name = Dynamic.attempt(|| d.field_all("name", Decode.from_dynamic_all))
-    count = Dynamic.attempt(|| d.field_all("count", Decode.from_dynamic_all))
-    (name, count) match {
-      (Dynamic.Decoded(name), Dynamic.Decoded(count)) -> ItemBody(name:, count:)
-      _ -> fail Dynamic.DecodeErrors(errors: name.errors_of().append(count.errors_of()))
-    }
-  }
-}
-
-impl ItemBody: Shaped {
-  fn shape_in(proxy, visiting) {
-    name: Option[String] = None
-    count: Option[Int] = None
-    Record(
-      name: "ItemBody",
-      fields: [
-        Field(name: "name", shape: Shaped.shape_in(name, visiting)),
-        Field(name: "count", shape: Shaped.shape_in(count, visiting)),
-      ],
-    )
-  }
-}
-
-impl Item: Encode {
-  fn to_dynamic(self) {
-    Dynamic.object([("id", Encode.to_dynamic(self.id)), ("name", Encode.to_dynamic(self.name))])
-  }
-}
-
-impl Found: Encode {
-  fn to_dynamic(self) {
-    Dynamic.object([("names", Encode.to_dynamic(self.names))])
-  }
-}
 
 # The handlers.
 
@@ -274,20 +169,7 @@ fn options_lists_the_methods() {
   assert res.header("allow") == Some("GET, DELETE, HEAD, OPTIONS")
 }
 
-type Wrong(name: String)
-
-impl Wrong: Decode {
-  fn from_dynamic(d) {
-    Wrong(name: d.field("name", Decode.from_dynamic))
-  }
-}
-
-impl Wrong: Shaped {
-  fn shape_in(proxy, visiting) {
-    name: Option[String] = None
-    Record(name: "Wrong", fields: [Field(name: "name", shape: Shaped.shape_in(name, visiting))])
-  }
-}
+type Wrong(name: String) derive Decode, Shaped
 
 fn wrong(input: Wrong) -> Item {
   Item(id: 0, name: input.name)

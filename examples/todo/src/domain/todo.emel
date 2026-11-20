@@ -1,6 +1,6 @@
 # Todos and where they are kept. Nothing here knows HTTP, JSON or quince.
 
-import Shape.Rule.{Rule, Broken}
+import Rule.{Rule, Broken}
 
 const TITLE: List[Rule[String]] = [Rule.min_length(1), Rule.max_length(100)]
 
