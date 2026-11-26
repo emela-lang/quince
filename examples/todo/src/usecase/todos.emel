@@ -4,14 +4,15 @@
 import Domain.Todo.{Todo, TodoId, Title, TodoStore, TodoNotFound}
 
 pub fn create(title: Title) -> Todo uses { TodoStore } {
-  store = use TodoStore
+  store <- TodoStore
   todo = Todo(id: store.next_id(), title:, done: False)
   store.save(todo)
   todo
 }
 
 pub fn list(done: Option[Bool]) -> List[Todo] uses { TodoStore } {
-  todos = (use TodoStore).all()
+  store <- TodoStore
+  todos = store.all()
   done match {
     Some(d) -> todos.filter(|t| t.done == d)
     None    -> todos
@@ -19,23 +20,25 @@ pub fn list(done: Option[Bool]) -> List[Todo] uses { TodoStore } {
 }
 
 pub fn get(id: TodoId) -> Todo fails TodoNotFound uses { TodoStore } {
-  (use TodoStore).find(id)
+  store <- TodoStore
+  store.find(id)
 }
 
 pub fn rename(id: TodoId, title: Title) -> Todo fails TodoNotFound uses { TodoStore } {
-  store = use TodoStore
+  store <- TodoStore
   todo = Todo(title:, ..store.find(id))
   store.save(todo)
   todo
 }
 
 pub fn complete(id: TodoId) -> Todo fails TodoNotFound uses { TodoStore } {
-  store = use TodoStore
+  store <- TodoStore
   todo = Todo(done: True, ..store.find(id))
   store.save(todo)
   todo
 }
 
 pub fn remove(id: TodoId) -> () fails TodoNotFound uses { TodoStore } {
-  (use TodoStore).remove(id)
+  store <- TodoStore
+  store.remove(id)
 }
