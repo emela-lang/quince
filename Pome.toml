@@ -1,7 +1,7 @@
 [pome]
 name = "github.com/emela-lang/quince"
-version = "0.7.0"
-emela = "0.28.0"
+version = "0.7.1"
+emela = "0.29.0"
 
 [dependencies]
-"github.com/emela-lang/x/rule" = "v0.1.0"
+"github.com/emela-lang/x/rule" = "v0.1.1"
