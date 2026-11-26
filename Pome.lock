@@ -3,7 +3,7 @@ version = 1
 
 [[pome]]
 path = "github.com/emela-lang/x/rule"
-version = "v0.1.0"
-commit = "18c1c7f8b4316a1720ae1cb2d5edcc1eb2a1611e"
-hash = "h1:4eK/BlbyaRjNVP8+4Q/f+w1QkJcXIVoSLKHV4NVgHGg="
-manifest = "h1:E6MDNUZGdl72hf7yTElHjamExNk+8Smvq5m7GkJamsM="
+version = "v0.1.1"
+commit = "5522d7e8210db0ccd1c1b628918fedf6766ac7d0"
+hash = "h1:ocUi2nHtBOXXybzj0MsfChCxUszd1h7AXzJwLsj953s="
+manifest = "h1:4udaV7JiK+zy8/qWGO3KDYlRb5tZZd2kVcri4lXxARo="
