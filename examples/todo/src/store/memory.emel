@@ -13,30 +13,35 @@ pub fn empty() -> Memory {
 
 pub handler MemoryTodos: TodoStore {
   fn next_id() {
-    memory = (use State[Memory]).get()
-    (use State[Memory]).set(Memory(next: memory.next + 1, ..memory))
+    state <- State[Memory]
+    memory = state.get()
+    state.set(Memory(next: memory.next + 1, ..memory))
     Todo.numbered(memory.next)
   }
 
   fn find(id) {
-    (use State[Memory]).get().todos.find(|t| t.id == id).or_fail(TodoNotFound(id:))
+    state <- State[Memory]
+    state.get().todos.find(|t| t.id == id).or_fail(TodoNotFound(id:))
   }
 
   fn all() {
-    (use State[Memory]).get().todos
+    state <- State[Memory]
+    state.get().todos
   }
 
   fn save(todo) {
-    (use State[Memory]).update(|m| {
+    state <- State[Memory]
+    state.update(|m| {
       others = m.todos.filter(|t| t.id != todo.id)
       Memory(todos: others.append([todo]), ..m)
     })
   }
 
   fn remove(id) {
-    memory = (use State[Memory]).get()
+    state <- State[Memory]
+    memory = state.get()
     if memory.todos.any(|t| t.id == id) {
-      (use State[Memory]).set(Memory(todos: memory.todos.filter(|t| t.id != id), ..memory))
+      state.set(Memory(todos: memory.todos.filter(|t| t.id != id), ..memory))
     } else {
       fail TodoNotFound(id:)
     }
